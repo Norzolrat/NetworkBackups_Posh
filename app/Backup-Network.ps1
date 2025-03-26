@@ -53,19 +53,28 @@ function Import-DeviceCredentials {
 }
 
 # Création du repo SVN
+
 function Initialize-SVNRepo {
     param (
         [string]$Path
     )
+
+    $repoPath = Join-Path $Path ".repo"
     $configsPath = Join-Path $Path "configs"
-    svnadmin create $Path
-    New-Item -ItemType Directory -Path $ConfigsPath
-    
-    # Correction du format de l'URL
-    $fullPath = (Resolve-Path $Path).Path
-    $svnUrl = "file:///" + ($fullPath -replace "\\", "/")
-    svn checkout $svnUrl $ConfigsPath
+
+    # Créer le dépôt dans un dossier caché
+    svnadmin create $repoPath
+
+    # Générer l’URL locale du dépôt
+    $fullRepoPath = (Resolve-Path $repoPath).Path
+    $svnUrl = "file:///" + ($fullRepoPath -replace "\\", "/")
+
+    Write-Host "SVN URL: $svnUrl"
+
+    # Faire le checkout vers configs
+    svn checkout $svnUrl $configsPath
 }
+
 
 # Création des dossiers nécessaires
 function Initialize-BackupEnvironment {
@@ -73,7 +82,7 @@ function Initialize-BackupEnvironment {
         New-Item -ItemType Directory -Path $backupPath
         Initialize-SVNRepo -Path $backupPath
         Write-Host "Dossier de backup créé: $backupPath" -ForegroundColor Green
-    }elseif (-not (Test-Path (Join-Path $backupPath "conf"))) {
+    }elseif (-not (Test-Path (Join-Path $backupPath "configs"))) {
         Initialize-SVNRepo -Path $backupPath
     }
 }

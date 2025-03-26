@@ -1,0 +1,31 @@
+{
+    "devices": [
+        {
+            "Name": "SW_PROD_1",
+            "IP": "192.168.99.7",
+            "Type": "comware",
+            "Site": "Paris01",
+            "Commands": [
+                "cat /home/admin/configA"
+            ]
+        },
+        {
+            "Name": "SW_PROD_2",
+            "IP": "192.168.99.7",
+            "Type": "aruba",
+            "Site": "Paris01",
+            "Commands": [
+                "cat /home/admin/configB"
+            ]
+        },
+        {
+            "Name": "SW_TEST_1",
+            "IP": "192.168.99.7",
+            "Type": "arubacx",
+            "Site": "Paris14",
+            "Commands": [
+                "cat /home/admin/configC"
+            ]
+        }
+    ]
+}

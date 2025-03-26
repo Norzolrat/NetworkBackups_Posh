@@ -1,6 +1,6 @@
 
 <# Imports of modules  to use #>
-. ("$PSScriptRoot\Utils")
+. "/app/src/Utils"
 
 
 function Get-ConfigContent {

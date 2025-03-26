@@ -1,8 +1,0 @@
-# Ignorer le fichier devices.json
-devices.json
-
-# Ignorer le fichier credentials.xml
-credentials.xml
-
-# Ignorer le dossier NetworkBackups et tous ses sous-dossiers
-NetworkBackups/**

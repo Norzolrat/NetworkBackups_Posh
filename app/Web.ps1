@@ -1,6 +1,6 @@
 <# Imports of modules  to use #>
-. ("$PSScriptRoot\src\Handle-Conf")
-. ("$PSScriptRoot\src\Utils")
+. "/app/src/Handle-Conf"
+. "/app/src/Utils"
 
 
 # Fonction Création HTML
@@ -31,12 +31,13 @@ function Get-Html{
 function Start-ConfigServer {
     param(
         [string]$prefix = "http",
-        [string]$addr = "localhost",
+        [string]$addr = "0.0.0.0",
         [string]$port = "8080"
     )
    
     $http = [System.Net.HttpListener]::new()
-    $http.Prefixes.Add("$($prefix)://$($addr):$($port)/")
+    #$http.Prefixes.Add("$($prefix)://$($addr):$($port)/")
+    $http.Prefixes.Add("$($prefix)://+:$($port)/")
    
     try {
         $http.Start()
