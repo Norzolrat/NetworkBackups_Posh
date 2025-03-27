@@ -17,7 +17,8 @@ function Handle-Diff {
     }
 
     $diff_verison = $parameters[1]
-    $diff_path = "${$configsPath}/${$parameters[0]}"
+    $diff_path = "/app/NetworkBackups/configs/"+$parameters[0]
+    Write-Host $parameters
     Write-Host $diff_verison
     Write-Host $diff_path
 
