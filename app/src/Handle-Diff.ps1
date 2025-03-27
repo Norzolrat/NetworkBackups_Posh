@@ -20,6 +20,7 @@ function Handle-Diff {
     $diff_path = "$($configsPath)/$($parameters[0])"
     Write-Host $parameters.GetType().FullName
     Write-Host $parameters
+    Write-Host $parameters.Keys
     Write-Host $diff_verison
     Write-Host $diff_path
 
