@@ -1,4 +1,3 @@
-## Imports des modules nécessaires
 . "/app/src/Utils"
 
 function Get-ConfigContent {
@@ -15,8 +14,20 @@ function Get-ConfigContent {
 
 function Get-RevisionSelector {
     param(
-        [string]$currentRevision
+        [int]$currentRevision,
+        [int]$revisionCount = 10
     )
+
+    $revisionOptions = @()
+    $minRevision = [Math]::Max(1, $currentRevision - $revisionCount)
+
+    for ($i = $currentRevision; $i -ge $minRevision; $i--) {
+        if ($i -eq $currentRevision) {
+            $revisionOptions += "<option value='$i' selected>$i (actuelle)</option>"
+        } else {
+            $revisionOptions += "<option value='$i'>$i</option>"
+        }
+    }
 
     return @"
 <div class='revision-section' style='margin: 20px 0; padding: 15px; background: #f5f5f5; border-radius: 5px;'>
@@ -24,10 +35,7 @@ function Get-RevisionSelector {
         <label for='revisionSelect'>Consulter la révision :</label>
         <select id='revisionSelect' style='margin: 0 10px; padding: 5px;'>
             <option value=''>Sélectionner une révision</option>
-            <option value='$($currentRevision - 3)'>$($currentRevision - 3)</option>
-            <option value='$($currentRevision - 2)'>$($currentRevision - 2)</option>
-            <option value='$($currentRevision - 1)'>$($currentRevision - 1)</option>
-            <option value='$currentRevision' selected>$currentRevision (actuelle)</option>
+            $($revisionOptions -join "`n")
         </select>
         <button onclick='showRevision(this)' style='padding: 5px 10px; margin-right: 10px;'>Voir le contenu</button>
     </div>
@@ -161,7 +169,7 @@ function Handle-Conf {
 
     $tabContents = $configs.Keys | ForEach-Object {
         $config = $configs[$_]
-        $currentRev = (svn info $config.Path | Select-String "Last Changed Rev: (\d+)").Matches.Groups[1].Value
+        $currentRev = [int](svn info $config.Path | Select-String "Last Changed Rev: (\d+)").Matches.Groups[1].Value
         $content = Get-ConfigContent -Rev $config.Revision -File $config.Path
 
         $siteClass = "site-$($config.Site)"
@@ -170,7 +178,7 @@ function Handle-Conf {
         @"
 <div id='$($config.Name)' class='tabcontent $siteClass $typeClass'>
     <h2>$($config.Name) (Latest rev : $currentRev)</h2>
-    $(Get-RevisionSelector -currentRevision $currentRev)
+    $(Get-RevisionSelector -currentRevision $currentRev -revisionCount 10)
     <div class='content' id="cnt_$($config.Name)">
         <pre>$content</pre>
     </div>
