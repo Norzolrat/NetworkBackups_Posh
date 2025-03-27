@@ -59,7 +59,7 @@ function Start-ConfigServer {
                 # Router vers la fonction appropriée
                 $body = switch ($path) {
                     "/conf" { Handle-Conf -parameters $parameters }
-                    "/diff" { Handle-Diff }
+                    "/diff" { Handle-Diff -parameters $parameters }
                     default { Handle-Default -baseUrl "$($prefix)://$($addr):$($port)" }
                 }
 
