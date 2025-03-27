@@ -16,7 +16,12 @@ function Handle-Diff {
 "@
     }
 
-    $diffContent = (svn diff -r $parameters[1]:HEAD "$configsPath/$parameters[0]" | Out-String)
+    $diff_verison = $parameters[1]
+    $diff_path = "${$configsPath}/${$parameters[0]}"
+    Write-Host $diff_verison
+    Write-Host $diff_path
+
+    $diffContent = (svn diff -r "$diff_verison":HEAD "$diff_path" | Out-String)
 
     return @"
 <div style='margin-top: 20px;'>
