@@ -38,6 +38,7 @@ function Get-RevisionSelector {
             $($revisionOptions -join "`n")
         </select>
         <button onclick='showRevision(this)' style='padding: 5px 10px; margin-right: 10px;'>Voir le contenu</button>
+        <button onclick='showRevision(this)' style='padding: 5px 10px; margin-right: 10px;'>Voir les différences</button>
     </div>
     <div id='revisionContent' style='display: none; margin-top: 15px;'>
         <h3 id='revisionTitle' style='margin-bottom: 10px;'></h3>

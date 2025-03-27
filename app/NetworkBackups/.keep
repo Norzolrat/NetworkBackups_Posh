@@ -1,4 +1,3 @@
-<button onclick='diffRevision(this)' style='padding: 5px 10px; margin-right: 10px;'>Voir les différences</button>
 
 function diffRevision(button) {
     let rev_sel = button.closest('.revision-section');
