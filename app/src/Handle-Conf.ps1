@@ -64,13 +64,15 @@ function showRevision(button) {
 }
 
 function diffRevision(button) {
-    //let rev_sel = button.closest('.revision-section');
-    //let parentid = rev_sel.parentElement.id;
-    //let rev = rev_sel.querySelector('#revisionSelect').value;
-    //if (!rev) return;
+    let rev_sel = button.closest('.revision-section');
+    let parentid = rev_sel.parentElement.id;
+    let rev = rev_sel.querySelector('#revisionSelect').value;
+    if (!rev) return;
     //window.location.href = "/diff?"+parentid"="+rev;
     window.location.href = "/diff";
-    console.log("toto");
+    console.log(rev_sel);
+    console.log(parentid);
+    console.log(rev);
 }
 
 function filterConfigs() {
