@@ -1,5 +1,6 @@
 <# Imports of modules  to use #>
 . "/app/src/Handle-Conf"
+. "/app/src/Handle-Diff"
 . "/app/src/Utils"
 
 
@@ -31,7 +32,7 @@ function Get-Html{
 function Start-ConfigServer {
     param(
         [string]$prefix = "http",
-        [string]$addr = "0.0.0.0",
+        [string]$addr = "localhost",
         [string]$port = "8080"
     )
    
@@ -58,6 +59,7 @@ function Start-ConfigServer {
                 # Router vers la fonction appropriée
                 $body = switch ($path) {
                     "/conf" { Handle-Conf -parameters $parameters }
+                    "/diff" { Handle-Diff }
                     default { Handle-Default -baseUrl "$($prefix)://$($addr):$($port)" }
                 }
 

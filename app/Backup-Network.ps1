@@ -240,36 +240,3 @@ function Backup-NetworkDevices {
 # Exécuter le backup
 Backup-NetworkDevices
 
-<#
-## --- Exemple fichier devices.json ---##
-
-{
-    "devices": [
-        {
-            "Name": "SW_PROD_1",
-            "IP": "192.168.2.1",
-            "Type": "comware",
-            "Commands": [
-                "screen-length disable\n display current-configuration"
-            ]
-        },
-        {
-            "Name": "SW_PROD_2",
-            "IP": "192.168.2.2",
-            "Type": "aruba",
-            "Commands": [
-                "no page\n show running-config"
-            ]
-        },
-        {
-            "Name": "SW_TEST_1",
-            "IP": "192.168.2.3",
-            "Type": "arubacx",
-            "Commands": [
-                "no page\n show running-config"
-            ]
-        }
-    ]
-}
-
-#>
