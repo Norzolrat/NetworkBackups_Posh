@@ -11,7 +11,9 @@ function Handle-Diff {
     }
 
     if ($parameters.Count -eq 0) {
-         return "<h1>Aucune configuration trouvée</h1><br><button onclick='window.location.href="/conf"' style='padding: 10px 15px; font-size: 14px;'>⬅️ Retour</button>"
+         return @"
+    <h1>Aucune configuration trouvée</h1><br><button onclick='window.location.href="/conf"' style='padding: 10px 15px; font-size: 14px;'>⬅️ Retour</button>
+"@
     }
 
     $diffContent = (svn diff -r $parameters[1]:HEAD "$configsPath/$parameters[0]" | Out-String)
