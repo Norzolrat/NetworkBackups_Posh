@@ -19,21 +19,21 @@ function Get-RevisionSelector {
     )
 
     return @"
-<div class=\"revision-section\" style=\"margin: 20px 0; padding: 15px; background: #f5f5f5; border-radius: 5px;\">
-    <div class=\"revision-controls\" style=\"margin-bottom: 15px;\">
-        <label for=\"revisionSelect\">Consulter la révision :</label>
-        <select id=\"revisionSelect\" style=\"margin: 0 10px; padding: 5px;\">
-            <option value=\"\">Sélectionner une révision</option>
-            <option value=\"$($currentRevision - 3)\">$($currentRevision - 3)</option>
-            <option value=\"$($currentRevision - 2)\">$($currentRevision - 2)</option>
-            <option value=\"$($currentRevision - 1)\">$($currentRevision - 1)</option>
-            <option value=\"$currentRevision\" selected>$currentRevision (actuelle)</option>
+<div class='revision-section' style='margin: 20px 0; padding: 15px; background: #f5f5f5; border-radius: 5px;'>
+    <div class='revision-controls' style='margin-bottom: 15px;'>
+        <label for='revisionSelect'>Consulter la révision :</label>
+        <select id='revisionSelect' style='margin: 0 10px; padding: 5px;'>
+            <option value=''>Sélectionner une révision</option>
+            <option value='$($currentRevision - 3)'>$($currentRevision - 3)</option>
+            <option value='$($currentRevision - 2)'>$($currentRevision - 2)</option>
+            <option value='$($currentRevision - 1)'>$($currentRevision - 1)</option>
+            <option value='$currentRevision' selected>$currentRevision (actuelle)</option>
         </select>
-        <button onclick=\"showRevision(this)\" style=\"padding: 5px 10px; margin-right: 10px;\">Voir le contenu</button>
+        <button onclick='showRevision(this)' style='padding: 5px 10px; margin-right: 10px;'>Voir le contenu</button>
     </div>
-    <div id=\"revisionContent\" style=\"display: none; margin-top: 15px;\">
-        <h3 id=\"revisionTitle\" style=\"margin-bottom: 10px;\"></h3>
-        <pre id=\"revisionData\" style=\"background: white; padding: 15px; border: 1px solid #ddd; border-radius: 3px;\"></pre>
+    <div id='revisionContent' style='display: none; margin-top: 15px;'>
+        <h3 id='revisionTitle' style='margin-bottom: 10px;'></h3>
+        <pre id='revisionData' style='background: white; padding: 15px; border: 1px solid #ddd; border-radius: 3px;'></pre>
     </div>
 </div>
 <script>
@@ -57,17 +57,32 @@ function showRevision(button) {
 function filterConfigs() {
     let value = document.getElementById("filterSelect").value;
     let allTabs = document.querySelectorAll(".tabcontent");
+    let visibleIds = [];
+
     allTabs.forEach(tab => {
-        if (value === "all") {
+        if (value === "all" || tab.classList.contains(value)) {
             tab.style.display = "block";
+            visibleIds.push(tab.id);
         } else {
-            if (tab.classList.contains(value)) {
-                tab.style.display = "block";
-            } else {
-                tab.style.display = "none";
-            }
+            tab.style.display = "none";
         }
     });
+
+    let allButtons = document.querySelectorAll(".tablinks");
+    allButtons.forEach(button => {
+        let configName = button.textContent.trim();
+        if (visibleIds.includes(configName)) {
+            button.style.display = "inline-block";
+        } else {
+            button.style.display = "none";
+        }
+    });
+
+    let activeTab = document.querySelector(".tablinks.active");
+    if (!activeTab || activeTab.style.display === "none") {
+        let firstVisible = document.querySelector(".tablinks:not([style*='display: none'])");
+        if (firstVisible) firstVisible.click();
+    }
 }
 </script>
 "@
