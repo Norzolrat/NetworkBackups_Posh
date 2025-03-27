@@ -38,7 +38,6 @@ function Get-RevisionSelector {
             $($revisionOptions -join "`n")
         </select>
         <button onclick='showRevision(this)' style='padding: 5px 10px; margin-right: 10px;'>Voir le contenu</button>
-        <button onclick='diffRevision(this)' style='padding: 5px 10px; margin-right: 10px;'>Voir les différences</button>
     </div>
     <div id='revisionContent' style='display: none; margin-top: 15px;'>
         <h3 id='revisionTitle' style='margin-bottom: 10px;'></h3>
@@ -61,14 +60,6 @@ function showRevision(button) {
     } else {
         window.location.href = url + "?"+parentid+"="+rev;
     }
-}
-
-function diffRevision(button) {
-    let rev_sel = button.closest('.revision-section');
-    let parentid = rev_sel.parentElement.id;
-    let rev = rev_sel.querySelector('#revisionSelect').value;
-    if (!rev) return;
-    window.location.href = "/diff?"+parentid"="+rev;
 }
 
 function filterConfigs() {
