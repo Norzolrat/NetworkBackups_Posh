@@ -64,12 +64,12 @@ function showRevision(button) {
 }
 
 function diffRevision(button) {
-    //let rev_sel = button.closest('.revision-section');
-    //let parentid = rev_sel.parentElement.id;
-    //let rev = rev_sel.querySelector('#revisionSelect').value;
-    //if (!rev) return;
-    //window.location.href = "/diff?"+parentid"="+rev;
-    console.log("toto");
+    let rev_sel_diff = button.closest('.revision-section');
+    let parentid_diff = rev_sel.parentElement.id;
+    let rev_diff = rev_sel_diff.querySelector('#revisionSelect').value;
+    if (!rev_diff) return;
+    window.location.href = "/diff?"+parentid_diff"="+rev_diff;
+    console.log(rev_diff);
 }
 
 function filterConfigs() {
