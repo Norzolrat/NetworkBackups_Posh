@@ -24,7 +24,7 @@ function Handle-Diff {
     Write-Host $diff_verison
     Write-Host $diff_path
 
-    $diffContent = (svn diff -r "$($diff_verison)":HEAD "$($diff_path)" | Out-String)
+    $diffContent = (svn diff -r "$($diff_verison):HEAD" $diff_path | Out-String)
 
     return @"
 <div style='margin-top: 20px;'>
