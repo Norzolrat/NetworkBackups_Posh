@@ -10,16 +10,11 @@ function Handle-Diff {
         throw "Chemin de configuration inexistant: $configsPath"
     }
 
-    $diffContent = (svn diff -r 1:HEAD /app/NetworkBackups/configs/SW_PROD_1 | Out-String)
+    if ($parameters.Count -eq 0) {
+         return "<h1>Aucune configuration trouvée</h1><br><button onclick='window.location.href="/conf"' style='padding: 10px 15px; font-size: 14px;'>⬅️ Retour</button>"
+    }
 
-
-    # if ($configs.Count -eq 0) {
-    #     return "<h1>Aucune configuration trouvée</h1>"
-    # }
-
-    Write-Host $parameters
-
-
+    $diffContent = (svn diff -r $parameters[1]:HEAD "$configsPath/$parameters[0]" | Out-String)
 
     return @"
 <div style='margin-top: 20px;'>
