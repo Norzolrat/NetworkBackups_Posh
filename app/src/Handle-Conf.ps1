@@ -68,7 +68,7 @@ function diffRevision(button) {
     let parentid = rev_sel.parentElement.id;
     let rev = rev_sel.querySelector('#revisionSelect').value;
     if (!rev) return;
-    window.location.href = `/diff?${parentid}=${rev}`;
+    window.location.href = "/diff?"+parentid"="+rev;
 }
 
 function filterConfigs() {
