@@ -21,13 +21,15 @@ function Handle-Diff {
     $diffContent = (svn diff -r "$($diff_verison):HEAD" $diff_path | Out-String)
  $diffLines = $diffRaw -split "`n"
 
-    $styled = @"<style>
+    $styled = @"
+<style>
 .diff-line     { font-family: monospace; white-space: pre-wrap; padding: 2px 10px; }
 .diff-context  { background-color: #f8f9fa; }
 .diff-added    { background-color: #d4edda; color: #155724; }
 .diff-removed  { background-color: #f8d7da; color: #721c24; }
 .diff-header   { background-color: #e2e3e5; font-weight: bold; }
-</style>"@
+</style>
+"@
 
     $styledLines = foreach ($line in $diffLines) {
         $escaped = [System.Web.HttpUtility]::HtmlEncode($line)
