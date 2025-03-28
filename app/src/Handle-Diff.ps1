@@ -21,6 +21,7 @@ function Handle-Diff {
     $diffContent = (svn diff -r "$($diff_verison):HEAD" $diff_path | Out-String)
     $diffLines = $diffRaw -split "`n"
     $styledLines = foreach ($line in $diffLines) {
+        Write-Host $line
         switch -regex ($line) {
             '^@@'        { "<div class='diff-line diff-header'>$line</div>" }
             '^\+\+\+'    { "<div class='diff-line diff-header'>$line</div>" }
