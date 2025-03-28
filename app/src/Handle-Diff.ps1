@@ -19,9 +19,8 @@ function Handle-Diff {
     $diff_verison = $parameters['rev']
     $diff_path = "$($configsPath)/$($parameters['device'])"
     $diffContent = (svn diff -r "$($diff_verison):HEAD" $diff_path | Out-String)
-    $diffLines = $diffRaw -split "`n"
+    $diffLines = $diffContent -split "`n"
     $styledLines = foreach ($line in $diffLines) {
-        Write-Host $line
         switch -regex ($line) {
             '^@@'        { "<div class='diff-line diff-header'>$line</div>" }
             '^\+\+\+'    { "<div class='diff-line diff-header'>$line</div>" }
@@ -47,8 +46,5 @@ function Handle-Diff {
 <div style='border:1px solid #ccc; border-radius:5px; overflow-x:auto; margin-top: 20px;'>
         $($styledLines -join "`n")
 </div>
-<pre>$diffContent</pre>
-
-
 "@
 }
