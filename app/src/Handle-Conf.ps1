@@ -30,15 +30,36 @@ function Get-RevisionSelector {
     }
 
     return @"
-<div class='revision-section' style='margin: 20px 0; padding: 15px; background: #f5f5f5; border-radius: 5px;'>
-    <div class='revision-controls' style='margin-bottom: 15px;'>
+<div class='revision-section' style='padding: 15px; background: rgb(0,40,90,50); border-radius: 5px;'>
+    <div class='revision-controls'>
+        <svg id="iconRevision" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"></circle>
+            <polyline points="12 6 12 12 16 14"></polyline>
+        </svg>
         <label for='revisionSelect'>Consulter la révision :</label>
         <select id='revisionSelect' style='margin: 0 10px; padding: 5px;'>
             <option value=''>Sélectionner une révision</option>
             $($revisionOptions -join "`n")
         </select>
-        <button onclick='showRevision(this)' style='padding: 5px 10px; margin-right: 10px;'>Voir le contenu</button>
-        <button onclick='diffRevision(this)' style='padding: 5px 10px; margin-right: 10px;'>Voir les différences</button>
+        <button id="iconBouton" onclick='showRevision(this)'>
+    <svg id="iconContenu"
+        xmlns="http://www.w3.org/2000/svg" 
+        width="16" 
+        height="16" 
+        viewBox="0 0 24 24" 
+        fill="none" 
+        stroke="currentColor" 
+        stroke-width="2" 
+        stroke-linecap="round" 
+        stroke-linejoin="round"
+    >
+        <circle cx="12" cy="12" r="2"></circle>
+        <path d="M22 12c-2.667 4.667-6 7-10 7s-7.333-2.333-10-7c2.667-4.667 6-7 10-7s7.333 2.333 10 7"></path>
+    </svg>
+    Voir le contenu
+</button>
+
+        <button id="button" onclick='diffRevision(this)'>Voir les différences</button>
     </div>
     <div id='revisionContent' style='display: none; margin-top: 15px;'>
         <h3 id='revisionTitle' style='margin-bottom: 10px;'></h3>
@@ -154,8 +175,11 @@ function Handle-Conf {
     }
 
     $filterHtml = @"
-<div style='margin-bottom: 15px;'>
-    <label for='filterSelect'>Filtrer par :</label>
+<div id="filterBar" >
+    <svg id="iconFiltre" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+    </svg>
+    <label id="filterLabel" for='filterSelect'>Filtrer par :</label>
     <select id='filterSelect' onchange='filterConfigs()'>
         <option value='all'>Tous</option>
         <optgroup label='Sites'>
@@ -186,7 +210,26 @@ function Handle-Conf {
 
         @"
 <div id='$($config.Name)' class='tabcontent $siteClass $typeClass'>
-    <h2>$($config.Name) (Latest rev : $currentRev)</h2>
+    <div id="logoH">
+        <svg 
+            xmlns="http://www.w3.org/2000/svg" 
+            width="20" 
+            height="20" 
+            viewBox="0 0 24 24" 
+            fill="none" 
+            stroke="currentColor" 
+            stroke-width="2" 
+            stroke-linecap="round" 
+            stroke-linejoin="round"
+        >
+            <rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect>
+            <rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect>
+            <line x1="6" y1="6" x2="6.01" y2="6"></line>
+            <line x1="6" y1="18" x2="6.01" y2="18"></line>
+        </svg>
+        <h2>$($config.Name) (Latest rev : $currentRev)</h2>
+    </div>
+    
     $(Get-RevisionSelector -currentRevision $currentRev -revisionCount 10)
     <div class='content' id="cnt_$($config.Name)">
         <pre>$content</pre>
@@ -196,11 +239,17 @@ function Handle-Conf {
     }
 
     return @"
-$filterHtml
-<div class='tab'>
-    $tabButtons
+<div id="container">
+    <div id="filter">
+        $filterHtml
+    </div>
+    <div class='tab'>
+        $($tabButtons -join "`n")
+    </div>
 </div>
-$tabContents
+
+$($tabContents -join "`n")
+
 <script>
 function openConfig(evt, configName) {
     const tabcontents = document.getElementsByClassName("tabcontent");
@@ -226,4 +275,5 @@ setInterval(() => {
 }, 60000);
 </script>
 "@
+
 }

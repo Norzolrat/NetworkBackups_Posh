@@ -1,7 +1,7 @@
 # Fonction pour charger et intégrer le CSS
 function Get-StyleContent {
     param(
-        [string]$cssPath = "$PSScriptRoot\..\styles\style.css"
+        [string]$cssPath = "$PSScriptRoot\..\assets\styles\style.css"
     )
     
     try {
@@ -17,6 +17,29 @@ function Get-StyleContent {
         return "<style>/* Error loading CSS */</style>"
     }
 }
+
+function Get-ImageContent {
+    param(
+        [string]$imagePath = "$PSScriptRoot\..\assets\img\logo.png",
+        [string]$altText = "Logo"
+    )
+
+    try {
+        if (Test-Path $imagePath) {
+            $imageBytes = [System.IO.File]::ReadAllBytes($imagePath)
+            $base64Image = [System.Convert]::ToBase64String($imageBytes)
+            $mimeType = "image/png"
+            return "<img src='data:$mimeType;base64,$base64Image' alt='$altText'/>"
+        } else {
+            Write-Warning "Fichier image non trouvé: $imagePath"
+            return "<!-- Image file not found -->"
+        }
+    } catch {
+        Write-Error "Erreur lors du chargement de l'image: $($_.Exception.Message)"
+        return "<!-- Error loading image -->"
+    }
+}
+
 
 # Fonction pour récupérer les paramettres de l'url
 function Get-UrlParameters {

@@ -1,0 +1,155 @@
+body { 
+    font-family: Arial, sans-serif; 
+    margin: 0; 
+    padding: 20px; 
+}
+#logo {
+    position: relative;
+    height: 100px; /* ajuste si besoin */
+}
+
+#image {
+    position: absolute;
+    left: 20px;
+    top: 50%;
+    transform: translateY(-50%);
+}
+
+#logo h1 {
+    text-align: center;
+    font-size: 1.5rem;
+    color: #00285A;
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: 100%;
+    z-index: 1;
+}
+
+#iconFiltre{
+    color: white;
+    margin: auto;
+    padding: 1px;
+}
+#filterBar{
+    margin: auto;
+    display: flex;
+    align-items: center;
+}
+#filterLabel{
+    color: #f5f5f5;
+    margin-left: 3px;
+}
+#container{
+    display:flex; 
+    align-items:center; 
+    margin:15px 0 15px 0;
+    background: #00285A;
+    border: 1px solid #00285A;
+    padding: 5px;
+}
+#filter{
+    margin-right:20px;
+}
+#iconRevision{
+    color: white;
+    margin-right: 5px;
+}
+.revision-controls{
+    display: flex;
+    align-items: center;
+    color: white;
+}
+.revision-section{
+    display: flex;
+    align-items: center;
+}
+#iconContenu{
+    color: #fff;
+    padding: 3px;
+}
+#iconBouton{
+    padding: 8px 16px;
+    background-color: #003CE3;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    font-size: 14px;
+    font-weight: 500;
+}
+#iconContenu{
+    margin-right: 3px;
+}
+#button{
+    margin-left: 10px;
+    padding: 8px 16px;
+    color:#003CE3;
+    border: none;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    font-size: 14px;
+    font-weight: 500;
+}
+.tab { 
+    overflow: hidden; 
+    position: sticky;
+    top: 0;
+    z-index: 1000;
+}
+#logoH{
+    margin-top: 0;
+    display: flex;
+    align-items: center;
+    flex-direction: center;
+    height: max-content;
+}
+#logoH h2{
+    margin-left: 5px;
+}
+.tab button {
+    background-color: inherit;
+    color: aliceblue;
+    float: left;
+    border: none;
+    outline: none;
+    cursor: pointer;
+    padding: 14px 16px;
+    transition: 0.3s;
+    font-size: 14px;
+}
+.tab button:hover { 
+    background: #6CC4F0; 
+    color: #00285A;
+}
+.tab button.active { 
+    background: #6CC4F0; 
+    color: #00285A;
+}
+.tabcontent {
+    display: none;
+    padding: 20px;
+    border: 1px solid #ccc;
+    border-top: none;
+    min-height: 300px;
+}
+pre {
+    background-color: #00285A;
+    color: #f5f5f5;
+    padding: 15px;
+    border-radius: 5px;
+    overflow-x: auto;
+    white-space: pre-wrap;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 14px;
+    line-height: 1.4;
+}
+h1, h2, h3 {
+    color: #333;
+}
+.content {
+    margin-top: 20px;
+}

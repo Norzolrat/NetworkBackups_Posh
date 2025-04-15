@@ -7,10 +7,12 @@
 # Fonction Création HTML
 function Get-Html{
     param(
-        [string]$cssPath = "$PSScriptRoot\styles\style.css",
+        [string]$cssPath = "$PSScriptRoot\assets\styles\style.css",
+        [string]$imgPath = "$PSScriptRoot/assets/img/logo.png",
         [string]$body
     )
     $styleTag = Get-StyleContent -cssPath $cssPath
+    $imageTag = Get-ImageContent -imagePath $imgPath -altText "Logo NetBackup" 
         
     return @"
     <!DOCTYPE html>
@@ -22,6 +24,12 @@ function Get-Html{
         $styleTag
     </head>
     <body>
+        <section id="logo">
+            <div id="image">
+                $imageTag
+            </div>
+            <h1>Backup configs équipements réseau</h1>
+        </section>        
         $body
     </body>
     </html>
