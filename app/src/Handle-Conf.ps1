@@ -15,17 +15,29 @@ function Get-ConfigContent {
 function Get-RevisionSelector {
     param(
         [int]$currentRevision,
-        [int]$revisionCount = 10
+        [int]$maxTryCount = 100,
+        [int]$revisionCount = 10,
+        [string]$fileName
     )
 
-    $revisionOptions = @()
-    $minRevision = [Math]::Max(1, $currentRevision - $revisionCount)
+    $filePath = "/app/NetworkBackups/configs/" + $fileName
 
-    for ($i = $currentRevision; $i -ge $minRevision; $i--) {
-        if ($i -eq $currentRevision) {
-            $revisionOptions += "<option value='$i' selected>$i (actuelle)</option>"
-        } else {
-            $revisionOptions += "<option value='$i'>$i</option>"
+    $revisionOptions = @()
+    $minRevision = [Math]::Max(1, $currentRevision - $maxTryCount)
+
+    $i = $currentRevision
+    $nbRevShown = 0
+
+    while ($i -ge $minRevision -and $revisionCount -ge $nbRevShown) {
+        $i--
+        $nbRevShown++
+        $rev_date = $(svn log -r $i $filePath | Select-String -Pattern "\| ([\d-]+ [\d:]+)" | ForEach-Object { $_.Matches.Groups[1].Value })
+        if ($rev_date) {
+            if ($i -eq $currentRevision) {
+                $revisionOptions += "<option value='$i' selected>$rev_date  (actuelle)</option>"
+            } else {
+                $revisionOptions += "<option value='$i'>$rev_date</option>"
+            }
         }
     }
 
@@ -183,6 +195,7 @@ function Handle-Conf {
     <select id='filterSelect' onchange='filterConfigs()'>
         <option value='all'>Tous</option>
         <optgroup label='Sites'>
+            <!-- ajouter les bonnes informations -->
             <option value='site-Paris01'>Paris01</option>
             <option value='site-Paris14'>Paris14</option>
         </optgroup>
@@ -230,7 +243,7 @@ function Handle-Conf {
         <h2>$($config.Name) (Latest rev : $currentRev)</h2>
     </div>
     
-    $(Get-RevisionSelector -currentRevision $currentRev -revisionCount 10)
+    $(Get-RevisionSelector -currentRevision $currentRev -revisionCount 10 -fileName $config.Name)
     <div class='content' id="cnt_$($config.Name)">
         <pre>$content</pre>
     </div>
