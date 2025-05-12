@@ -45,7 +45,7 @@ docker build -t bckp_posh-alpine .
 
 ### 2. ▶️ Lancement du conteneur
 ```bash
-docker run -e DEVICE_USER="admin" -e DEVICE_PASSWORD="changeme" -p 8080:8080 -v ./NetworkBackups:/app/NetworkBackups -v ./devices.json /app/devices.json bckp_posh-alpine
+docker run -e DEVICE_USER="admin" -e DEVICE_PASSWORD="changeme" -p 8080:8080 -v ./NetworkBackups:/app/NetworkBackups -v ./devices.json:/app/devices.json bckp_posh-alpine
 ```
 
 ### 3. 📝 Vérifiez les logs

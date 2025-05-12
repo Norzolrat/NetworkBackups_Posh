@@ -158,6 +158,14 @@ function Get-DeviceConfig {
                 
                 # Filtrer les lignes vides en début et fin et les lignes qui ne contiennent que des espaces
                 $cleanResult = ($cleanResult -split "`n" | Where-Object { $_.Trim() }) -join "`n"
+
+                # Filtrer les lignes vides, les lignes avec uniquement des espaces
+                # ET les lignes contenant "Last login" ou un format de date typique
+                $cleanResult = ($cleanResult -split "`n" | Where-Object {
+                    $_.Trim() -and
+                    ($_ -notmatch 'Last login') -and
+                    ($_ -notmatch '^\s*\w{3}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2}') # ex: Mon May 13 10:32:45
+                }) -join "`n"
                 
                 if ($cleanResult) {
                     $output += $cleanResult
