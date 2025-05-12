@@ -264,6 +264,55 @@ function Handle-Conf {
 $($tabContents -join "`n")
 
 <script>
+
+function saveActiveTab(tabName) {
+    localStorage.setItem("activeTab", tabName);
+}
+
+function getActiveTab() {
+    return localStorage.getItem("activeTab");
+}
+
+function saveRevision(sectionName, revision) {
+    localStorage.setItem("storage_" + sectionName, revision);
+}
+
+function getRevision(sectionName) {
+    return localStorage.getItem("storage_" + sectionName);
+}
+
+function saveConfig() {
+    const activeTab = document.querySelector(".tablinks.active");
+    if (activeTab) {
+        const tabName = activeTab.textContent.trim();
+        saveActiveTab(tabName);
+    }
+    
+    const tabContents = document.querySelectorAll(".tabcontent");
+    
+    tabContents.forEach(tab => {
+        const sectionName = tab.id;
+        const select = tab.querySelector(".revisionSelect");
+        
+        if (select) {
+            let revisionToSave;
+            if (select.value) {
+                revisionToSave = select.value;
+            } 
+            else {
+                const currentOption = Array.from(select.options).find(option => 
+                    option.textContent.includes("(actuelle)"));
+                if (currentOption) {
+                    revisionToSave = currentOption.value;
+                }
+            }
+            if (revisionToSave) {
+                saveRevision(sectionName, revisionToSave);
+            }
+        }
+    });
+}
+
 function openConfig(evt, configName) {
     const tabcontents = document.getElementsByClassName("tabcontent");
     Array.from(tabcontents).forEach(tab => tab.style.display = "none");
@@ -284,6 +333,7 @@ if (firstTab) {
 }
 
 setInterval(() => {
+    saveConfig();
     location.reload();
 }, 60000);
 </script>
