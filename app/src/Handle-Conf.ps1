@@ -265,16 +265,31 @@ $($tabContents -join "`n")
 
 <script>
 
-function saveActiveTab(tabName) {
-    localStorage.setItem("activeTab", tabName);
+function saveActiveTab() {
+    let activeTab = document.querySelector(".tablinks.active");
+    if (activeTab) {
+        let tabName = activeTab.textContent.trim();
+        localStorage.setItem("activeTab", tabName);
+    }
 }
 
 function getActiveTab() {
     return localStorage.getItem("activeTab");
 }
 
-function saveRevision(sectionName, revision) {
-    localStorage.setItem("storage_" + sectionName, revision);
+function saveRevision() {
+
+    let tabContents = document.querySelectorAll(".revision-controls");
+    tabContents.forEach(tab => {
+        const sectionName = tab.parentElement.parentElement.id;
+        const revision = tab.querySelector("#revisionSelect").value;
+        
+        if (revision) {
+            localStorage.setItem("storage_" + sectionName, revision);
+        }else{
+            localStorage.setItem("storage_" + sectionName, "latest");
+        }
+    });
 }
 
 function getRevision(sectionName) {
@@ -282,35 +297,8 @@ function getRevision(sectionName) {
 }
 
 function saveConfig() {
-    const activeTab = document.querySelector(".tablinks.active");
-    if (activeTab) {
-        const tabName = activeTab.textContent.trim();
-        saveActiveTab(tabName);
-    }
-    
-    const tabContents = document.querySelectorAll(".tabcontent");
-    
-    tabContents.forEach(tab => {
-        const sectionName = tab.id;
-        const select = tab.querySelector(".revisionSelect");
-        
-        if (select) {
-            let revisionToSave;
-            if (select.value) {
-                revisionToSave = select.value;
-            } 
-            else {
-                const currentOption = Array.from(select.options).find(option => 
-                    option.textContent.includes("(actuelle)"));
-                if (currentOption) {
-                    revisionToSave = currentOption.value;
-                }
-            }
-            if (revisionToSave) {
-                saveRevision(sectionName, revisionToSave);
-            }
-        }
-    });
+    saveActiveTab();
+    saveRevision();
 }
 
 function openConfig(evt, configName) {
