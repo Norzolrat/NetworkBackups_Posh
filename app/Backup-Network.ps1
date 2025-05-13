@@ -110,6 +110,39 @@ function Add-NewFiles {
     Set-Location $startingLocation
 }
 
+function Clean-TheConf {
+    param (
+        [string]$command,
+        [string]$conf
+    )
+
+    $checkCommand = ($command -split "`n")[-1].Trim()
+
+    $lines = $conf -split "`n"
+    $cleanedLines = @()
+    $startCollecting = $false
+
+    foreach ($line in $lines) {
+        if (-not $startCollecting -and $line -match [regex]::Escape($checkCommand)) {
+            $startCollecting = $true
+            continue
+        }
+
+        if ($startCollecting) {
+            $cleanedLines += $line
+        }
+    }
+
+    # if ($cleanedLines.Count -gt 0) {
+    #     $null = $cleanedLines.RemoveAt($cleanedLines.Count - 1)
+    # }
+
+    $cleanConf = $cleanedLines -join "`n"
+    $cleanConf = $cleanConf -replace '(\r?\n){3,}', "`n`n"
+
+    return $cleanConf.Trim()
+}
+
 # Fonction pour obtenir la configuration selon le type d'équipement et les commandes
 function Get-DeviceConfig {
     param (
@@ -166,6 +199,8 @@ function Get-DeviceConfig {
                     ($_ -notmatch 'Last login') -and
                     ($_ -notmatch '^\s*\w{3}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2}') # ex: Mon May 13 10:32:45
                 }) -join "`n"
+
+                $cleanResult = Clean-TheConf -command $command -conf $cleanResult
                 
                 if ($cleanResult) {
                     $output += $cleanResult

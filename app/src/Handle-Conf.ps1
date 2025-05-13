@@ -29,7 +29,6 @@ function Get-RevisionSelector {
     $nbRevShown = 0
 
     while ($i -ge $minRevision -and $revisionCount -ge $nbRevShown) {
-        $i--
         $nbRevShown++
         $rev_date = $(svn log -r $i $filePath | Select-String -Pattern "\| ([\d-]+ [\d:]+)" | ForEach-Object { $_.Matches.Groups[1].Value })
         if ($rev_date) {
@@ -39,6 +38,7 @@ function Get-RevisionSelector {
                 $revisionOptions += "<option value='$i'>$rev_date</option>"
             }
         }
+        $i--
     }
 
     return @"
