@@ -85,6 +85,16 @@ Fonctionnalités :
 
 - Interface à l'image de Aresia
 
+### Capture d'écran de l'interface
+
+![Interface Config NetBackup-PowerShell](./img/interface_config.png)
+
+*Exemple de l'interface de sauvegarde avec affichage d'une configuration d'équipement réseau*
+
+![Interface Diff NetBackup-PowerShell](./img/interface_diff.png)
+
+*Exemple de l'interface de sauvegarde avec affichage des différences d'un équipement réseau*
+
 ---
 
 ## 📝 Fichier `devices.json` exemple
