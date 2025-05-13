@@ -84,6 +84,9 @@ function showRevision(button) {
     let parentid = rev_sel.parentElement.id;
     let rev = rev_sel.querySelector('#revisionSelect').value;
     if (!rev) return;
+    localStorage.setItem("storage_" + parentid, rev);
+    const configContent = document.getElementById("cnt_" + parentid).querySelector('pre');
+    configContent.innerHTML = "Chargement...";
     let url = window.location.href;
     if(url.includes("?")){
         if(url.includes(parentid)) {
@@ -94,6 +97,7 @@ function showRevision(button) {
     } else {
         window.location.href = url + "?"+parentid+"="+rev;
     }
+    //location.reload();
 }
 
 function diffRevision(button) {
@@ -101,6 +105,7 @@ function diffRevision(button) {
     let parentid = rev_sel.parentElement.id;
     let rev = rev_sel.querySelector('#revisionSelect').value;
     if (!rev) return;
+    saveConfig();
     window.location.href = "/diff?device="+parentid+"&rev="+rev;
 }
 
@@ -135,6 +140,39 @@ function filterConfigs() {
     }
 }
 </script>
+"@
+}
+
+
+function Get-Filter {
+    $devicesData = Get-Content "$PSScriptRoot/../devices.json" | ConvertFrom-Json
+    $deviceSites = @{}
+    $deviceBrand = @{}
+    
+    foreach ($device in $devicesData.devices) {
+        if (-not $deviceSites.ContainsKey($device.Site)) {
+            $deviceSites[$device.Site] = $device.Site
+        }
+        if (-not $deviceBrand.ContainsKey($device.Type)) {
+            $deviceBrand[$device.Type] = $device.Type
+        }
+    }
+
+    $deviceSitesHTML = ($deviceSites.Keys | Sort-Object | ForEach-Object {
+        "<option value='site-$_'>$_</option>"
+    }) -join "`n"
+
+    $deviceBrandHTML = ($deviceBrand.Keys | Sort-Object | ForEach-Object {
+        "<option value='type-$_'>$_</option>"
+    }) -join "`n"
+
+    return @"
+<optgroup label='Sites'>
+    $deviceSitesHTML
+</optgroup>
+<optgroup label='Types'>
+    $deviceBrandHTML
+</optgroup>
 "@
 }
 
@@ -186,6 +224,8 @@ function Handle-Conf {
         }
     }
 
+    $filterOptions = Get-Filter
+
     $filterHtml = @"
 <div id="filterBar" >
     <svg id="iconFiltre" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -194,16 +234,7 @@ function Handle-Conf {
     <label id="filterLabel" for='filterSelect'>Filtrer par :</label>
     <select id='filterSelect' onchange='filterConfigs()'>
         <option value='all'>Tous</option>
-        <optgroup label='Sites'>
-            <!-- ajouter les bonnes informations -->
-            <option value='site-Paris01'>Paris01</option>
-            <option value='site-Paris14'>Paris14</option>
-        </optgroup>
-        <optgroup label='Types'>
-            <option value='type-comware'>Comware</option>
-            <option value='type-aruba'>Aruba</option>
-            <option value='type-arubacx'>ArubaCX</option>
-        </optgroup>
+        $filterOptions
     </select>
 </div>
 "@
@@ -265,6 +296,41 @@ $($tabContents -join "`n")
 
 <script>
 
+function initPageState() {
+    const activeTabName = localStorage.getItem("activeTab");
+    
+    if (activeTabName) {
+        const tablinks = document.getElementsByClassName("tablinks");
+        let foundTab = false;
+        
+        Array.from(tablinks).forEach(link => {
+            if (link.textContent.trim() === activeTabName) {
+                link.click();
+                foundTab = true;
+            }
+        });
+        
+        if (!foundTab && tablinks.length > 0) {
+            tablinks[0].click();
+        }
+    } else if (document.getElementsByClassName("tablinks").length > 0) {
+        document.getElementsByClassName("tablinks")[0].click();
+    }
+    
+    const tabcontents = document.getElementsByClassName("tabcontent");
+    Array.from(tabcontents).forEach(tab => {
+        const configName = tab.id;
+        const savedRevision = localStorage.getItem("storage_" + configName);
+        
+        if (savedRevision) {
+            const revisionSelect = tab.querySelector('#revisionSelect');
+            if (revisionSelect) {
+                revisionSelect.value = savedRevision;
+            }
+        }
+    });
+}
+
 function saveActiveTab() {
     let activeTab = document.querySelector(".tablinks.active");
     if (activeTab) {
@@ -312,18 +378,27 @@ function openConfig(evt, configName) {
     if (selectedTab) {
         selectedTab.style.display = "block";
         evt.currentTarget.className += " active";
+
+        localStorage.setItem("activeTab", configName);
+        
+        const savedRevision = localStorage.getItem("storage_" + configName);
+        if (savedRevision) {
+            const revisionSelect = selectedTab.querySelector('#revisionSelect');
+            if (revisionSelect) {
+                revisionSelect.value = savedRevision;
+            }
+        }
     }
 }
 
-const firstTab = document.getElementsByClassName("tablinks")[0];
-if (firstTab) {
-    firstTab.click();
-}
+document.addEventListener('DOMContentLoaded', function() {
+    initPageState();
+    setInterval(() => {
+        saveConfig();
+        location.reload();
+    }, 120000);
+});
 
-setInterval(() => {
-    saveConfig();
-    location.reload();
-}, 60000);
 </script>
 "@
 
