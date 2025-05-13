@@ -1,8 +1,13 @@
+param(
+    [string]$prefix = "http",
+    [string]$addr = "localhost", 
+    [string]$port = "8080"
+)
+
 <# Imports of modules  to use #>
 . "/app/src/Handle-Conf"
 . "/app/src/Handle-Diff"
 . "/app/src/Utils"
-
 
 # Fonction Création HTML
 function Get-Html{
@@ -41,11 +46,13 @@ function Start-ConfigServer {
     param(
         [string]$prefix = "http",
         [string]$addr = "localhost",
-        [string]$port = "8080"
+        [string]$port = "8080",
+        [string]$publicUrl = $env:PUB_URL
     )
    
+    $baseUrl = if ($publicUrl) { $publicUrl } else { "$($prefix)://$($addr):$($port)" }
+
     $http = [System.Net.HttpListener]::new()
-    #$http.Prefixes.Add("$($prefix)://$($addr):$($port)/")
     $http.Prefixes.Add("$($prefix)://+:$($port)/")
    
     try {
@@ -68,7 +75,7 @@ function Start-ConfigServer {
                 $body = switch ($path) {
                     "/conf" { Handle-Conf -parameters $parameters }
                     "/diff" { Handle-Diff -parameters $parameters }
-                    default { Handle-Default -baseUrl "$($prefix)://$($addr):$($port)" }
+                    default { Handle-Default -baseUrl $baseUrl }
                 }
 
                 $html = Get-Html -body $body
@@ -105,4 +112,4 @@ function Start-ConfigServer {
 }
 
 # Démarrer le serveur
-Start-ConfigServer
+Start-ConfigServer -prefix $prefix -addr $addr -port $port

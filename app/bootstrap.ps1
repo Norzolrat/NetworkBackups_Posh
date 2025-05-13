@@ -25,5 +25,5 @@ Start-Process crond -ArgumentList "-l 2"
 
 # 5. Lancer le script Web principal
 Write-Host "🚀 Démarrage de l'application principale..."
-. /app/Web.ps1
+pwsh /app/Web.ps1 -prefix $env:WEB_PREFIX -addr $env:WEB_ADDR -port $env:WEB_PORT
 

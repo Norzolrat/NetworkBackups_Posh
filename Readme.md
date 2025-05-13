@@ -45,7 +45,17 @@ docker build -t bckp_posh-alpine .
 
 ### 2. ▶️ Lancement du conteneur
 ```bash
-docker run -e DEVICE_USER="admin" -e DEVICE_PASSWORD="changeme" -p 8080:8080 -v ./NetworkBackups:/app/NetworkBackups -v ./devices.json:/app/devices.json bckp_posh-alpine
+docker run --env-file .env -p 8080:8080 -v ./NetworkBackups:/app/NetworkBackups -v ./devices.json:/app/devices.json bckp_posh-alpine
+```
+
+fichier .env exemple :
+```bash
+DEVICE_USER=admin
+DEVICE_PASSWORD=changeme
+WEB_PREFIX=http
+WEB_ADDR=127.0.0.1
+PUB_URL=http://localhost:8080
+WEB_PORT=8080
 ```
 
 ### 3. 📝 Vérifiez les logs
@@ -69,10 +79,11 @@ Fonctionnalités :
 - Liste des équipements sauvegardés
 - Visualisation des configurations actuelles
 - Sélecteur de révisions SVN
+- Filtre pour les équipements (selectionner par site ou par os)
+- Afficher seulement les différences entre une version et la plus actuelle
 
-- #TODO Filtre pour les équipement (selectionner par site ou par os)
-- #TODO Afficher seulement les différences entre une version et la plus actuelle
-- #TODO Améliorer l'interface
+
+- Interface à l'image de Aresia
 
 ---
 
