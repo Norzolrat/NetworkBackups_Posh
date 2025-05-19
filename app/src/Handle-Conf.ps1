@@ -49,7 +49,7 @@ function Get-RevisionSelector {
             <polyline points="12 6 12 12 16 14"></polyline>
         </svg>
         <label for='revisionSelect'>Consulter la révision :</label>
-        <select id='revisionSelect' style='margin: 0 10px; padding: 5px;'>
+        <select id='revisionSelect' style='padding: 5px;'>
             <option value=''>Sélectionner une révision</option>
             $($revisionOptions -join "`n")
         </select>
