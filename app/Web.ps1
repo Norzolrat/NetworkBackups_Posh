@@ -12,7 +12,7 @@ param(
 # Fonction Création HTML
 function Get-Html{
     param(
-        [string]$cssPath = "$PSScriptRoot\assets\styles\style.css",
+        [string]$cssPath = "$PSScriptRoot/assets/styles/style.css",
         [string]$imgPath = "$PSScriptRoot/assets/img/logo.png",
         [string]$body
     )
