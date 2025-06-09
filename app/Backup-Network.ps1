@@ -171,8 +171,47 @@ function Read-CommandOutput {
     param (
         $sshStream,
         [string]$command,
-        [int]$maxWaitSeconds = 300,
-        [string]$endPattern = '[\$#>]\s*
+        [int]$maxWaitSeconds = 120,
+        [string]$endPattern = '[\$#>]\s*$'
+    )
+    
+    $output = ""
+    $startTime = Get-Date
+    $lastDataTime = Get-Date
+    $stableDataTimeout = 10 # Attendre 10 secondes sans nouvelles données
+    
+    Write-Host "    Lecture de la sortie pour: $command" -ForegroundColor Cyan
+    
+    while (((Get-Date) - $startTime).TotalSeconds -lt $maxWaitSeconds) {
+        $newData = $sshStream.Read()
+        
+        if ($newData) {
+            $output += $newData
+            $lastDataTime = Get-Date
+            
+            # Vérifier si on a atteint la fin (prompt)
+            if ($output -match $endPattern) {
+                Write-Host "    Fin de commande détectée" -ForegroundColor Green
+                break
+            }
+        } else {
+            # Pas de nouvelles données, vérifier le timeout
+            if (((Get-Date) - $lastDataTime).TotalSeconds -gt $stableDataTimeout) {
+                Write-Host "    Timeout de stabilité atteint (pas de nouvelles données)" -ForegroundColor Yellow
+                break
+            }
+        }
+        
+        Start-Sleep -Milliseconds 100
+    }
+    
+    if (((Get-Date) - $startTime).TotalSeconds -ge $maxWaitSeconds) {
+        Write-Warning "Timeout global atteint pour la commande: $command"
+    }
+    
+    Write-Host "    Taille de sortie récupérée: $($output.Length) caractères" -ForegroundColor Cyan
+    return $output
+}
 
 # Fonction pour obtenir la configuration selon le type d'équipement et les commandes
 function Get-DeviceConfig {
