@@ -239,7 +239,7 @@ function Get-DeviceConfig {
             Start-Sleep -Seconds 2
             
             # Lire la sortie complète avec timeout étendu
-            $result = Read-CommandOutput -sshStream $sshStream -command $command -maxWaitSeconds 180
+            $result = Read-CommandOutput -sshStream $sshStream -command $command -maxWaitSeconds 720
             
             if ($result) {
                 # Nettoyer les séquences ANSI et autres caractères de contrôle
