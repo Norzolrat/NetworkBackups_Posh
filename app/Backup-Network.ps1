@@ -53,7 +53,6 @@ function Import-DeviceCredentials {
 }
 
 # Création du repo SVN
-
 function Initialize-SVNRepo {
     param (
         [string]$Path
@@ -65,7 +64,7 @@ function Initialize-SVNRepo {
     # Créer le dépôt dans un dossier caché
     svnadmin create $repoPath
 
-    # Générer l’URL locale du dépôt
+    # Générer l'URL locale du dépôt
     $fullRepoPath = (Resolve-Path $repoPath).Path
     $svnUrl = "file:///" + ($fullRepoPath -replace "\\", "/")
 
@@ -74,7 +73,6 @@ function Initialize-SVNRepo {
     # Faire le checkout vers configs
     svn checkout $svnUrl $configsPath
 }
-
 
 # Création des dossiers nécessaires
 function Initialize-BackupEnvironment {
@@ -87,7 +85,7 @@ function Initialize-BackupEnvironment {
     }
 }
 
-# Rajout des ellement dans le repos SVN
+# Rajout des éléments dans le repos SVN
 function Add-NewFiles {
     param (
         [string]$Path
@@ -133,14 +131,86 @@ function Clean-TheConf {
         }
     }
 
-    # if ($cleanedLines.Count -gt 0) {
-    #     $null = $cleanedLines.RemoveAt($cleanedLines.Count - 1)
-    # }
-
     $cleanConf = $cleanedLines -join "`n"
     $cleanConf = $cleanConf -replace '(\r?\n){3,}', "`n`n"
 
     return $cleanConf.Trim()
+}
+
+# Fonction pour attendre que le prompt soit prêt
+function Wait-ForPrompt {
+    param (
+        $sshStream,
+        [string]$promptPattern = '[\$#>]\s*$',
+        [int]$maxWaitSeconds = 30
+    )
+    
+    $startTime = Get-Date
+    $buffer = ""
+    
+    while (((Get-Date) - $startTime).TotalSeconds -lt $maxWaitSeconds) {
+        Start-Sleep -Milliseconds 500
+        $newData = $sshStream.Read()
+        
+        if ($newData) {
+            $buffer += $newData
+            # Vérifier si on a un prompt
+            if ($buffer -match $promptPattern) {
+                Write-Debug "Prompt détecté: $($matches[0])"
+                return $true
+            }
+        }
+    }
+    
+    Write-Warning "Timeout en attendant le prompt après $maxWaitSeconds secondes"
+    return $false
+}
+
+# Fonction pour lire complètement la sortie d'une commande
+function Read-CommandOutput {
+    param (
+        $sshStream,
+        [string]$command,
+        [int]$maxWaitSeconds = 120,
+        [string]$endPattern = '[\$#>]\s*$'
+    )
+    
+    $output = ""
+    $startTime = Get-Date
+    $lastDataTime = Get-Date
+    $stableDataTimeout = 10 # Attendre 10 secondes sans nouvelles données
+    
+    Write-Host "    Lecture de la sortie pour: $command" -ForegroundColor Cyan
+    
+    while (((Get-Date) - $startTime).TotalSeconds -lt $maxWaitSeconds) {
+        $newData = $sshStream.Read()
+        
+        if ($newData) {
+            $output += $newData
+            $lastDataTime = Get-Date
+            
+            # Vérifier si on a atteint la fin (prompt)
+            if ($output -match $endPattern) {
+                Write-Host "    Fin de commande détectée" -ForegroundColor Green
+                break
+            }
+        } else {
+            # Pas de nouvelles données, vérifier le timeout
+            if (((Get-Date) - $lastDataTime).TotalSeconds -gt $stableDataTimeout) {
+                Write-Host "    Timeout de stabilité atteint (pas de nouvelles données)" -ForegroundColor Yellow
+                break
+            }
+        }
+        
+        Start-Sleep -Milliseconds 100
+    }
+    
+    if (((Get-Date) - $startTime).TotalSeconds -ge $maxWaitSeconds) {
+        Write-Warning "Timeout global atteint pour la commande: $command"
+    }
+    
+    Write-Host "    Taille de sortie récupérée: $($output.Length) caractères" -ForegroundColor Cyan
+    return $output
 }
 
 # Fonction pour obtenir la configuration selon le type d'équipement et les commandes
@@ -151,16 +221,26 @@ function Get-DeviceConfig {
     )
 
     $output = @()
-    Start-Sleep -Seconds 4  # Attendre que la connexion soit stable
+    
+    # Attendre que la connexion soit stable
+    Write-Host "  Attente de stabilisation de la connexion..." -ForegroundColor Cyan
+    if (-not (Wait-ForPrompt -sshStream $sshStream -maxWaitSeconds 30)) {
+        throw "Impossible d'établir une connexion stable"
+    }
 
     foreach ($command in $device.Commands) {
         try {
             Write-Host "  Exécution de la commande: $command" -ForegroundColor Cyan
             
+            # Envoyer la commande
             $sshStream.WriteLine($command)
-            Start-Sleep -Seconds 3  # Attendre que la commande soit exécutée
-            $result = $sshStream.Read()
-
+            
+            # Attendre un peu que la commande soit envoyée
+            Start-Sleep -Seconds 2
+            
+            # Lire la sortie complète avec timeout étendu
+            $result = Read-CommandOutput -sshStream $sshStream -command $command -maxWaitSeconds 180
+            
             if ($result) {
                 # Nettoyer les séquences ANSI et autres caractères de contrôle
                 $cleanResult = $result
@@ -178,7 +258,7 @@ function Get-DeviceConfig {
                     '\[\\\d*[a-zA-Z]',            # Autres séquences de contrôle
                     '\[[0-9;]*[a-zA-Z]',          # Séquences numériques génériques
                     '\x1B\[[\x30-\x3F]*[\x20-\x2F]*[\x40-\x7E]', # Séquences d'échappement complexes
-                    '[^\x20-\x7E\n]'             # Tous les caractères non-imprimables sauf les sauts de ligne
+                    '[^\x20-\x7E\n\r\t]'         # Tous les caractères non-imprimables sauf les sauts de ligne, retours chariot et tabulations
                 )
 
                 # Appliquer chaque pattern de nettoyage
@@ -205,6 +285,9 @@ function Get-DeviceConfig {
                 if ($cleanResult) {
                     $output += $cleanResult
                     $output += "`n"
+                    Write-Host "  Commande exécutée avec succès. Taille: $($cleanResult.Length) caractères" -ForegroundColor Green
+                } else {
+                    Write-Warning "Contenu vide après nettoyage pour la commande '$command'"
                 }
             } else {
                 Write-Warning "Pas de sortie pour la commande '$command' sur $($device.Name)"
@@ -228,6 +311,9 @@ function Backup-NetworkDevices {
         $credential = Import-DeviceCredentials
 
         foreach ($device in $devices) {
+            $sshSession = $null
+            $sshStream = $null
+            
             try {
                 Write-Host "`nTraitement de $($device.Name) ($($device.IP))..." -ForegroundColor Yellow
 
@@ -237,42 +323,77 @@ function Backup-NetworkDevices {
                     continue
                 }
 
-                # Établir la connexion SSH
-                $sshSession = New-SSHSession -ComputerName $device.IP -Credential $credential -AcceptKey -Force
+                # Établir la connexion SSH avec timeout étendu
+                Write-Host "  Établissement de la connexion SSH..." -ForegroundColor Cyan
+                $sshSession = New-SSHSession -ComputerName $device.IP -Credential $credential -AcceptKey -Force -ConnectionTimeout 30
                 
                 if ($sshSession) {
-                    # Créer un nouveau stream SSH
-                    $sshStream = New-SSHShellStream -Index ($sshSession.SessionId)
+                    Write-Host "  Connexion SSH établie (SessionId: $($sshSession.SessionId))" -ForegroundColor Green
+                    
+                    # Créer un nouveau stream SSH avec buffer plus grand
+                    $sshStream = New-SSHShellStream -Index ($sshSession.SessionId) -Columns 200 -Rows 50 -TerminalName "xterm"
+                    
+                    if ($sshStream) {
+                        Write-Host "  Stream SSH créé" -ForegroundColor Green
+                        
+                        # Récupérer la configuration avec gestion améliorée
+                        $config = Get-DeviceConfig -device $device -sshStream $sshStream
 
-                    # Récupérer la configuration
-                    $config = Get-DeviceConfig -device $device -sshStream $sshStream
+                        if ($config -and $config.Count -gt 0) {
+                            # Créer le fichier de backup
+                            $fileName = "$($device.Name)"
+                            $configPath = Join-Path $backupPath "configs"
+                            $filePath = Join-Path $configPath $fileName
 
-                    if ($config) {
-                        # Créer le fichier de backup
-                        $fileName = "$($device.Name)"
-                        $configPath = Join-Path $backupPath "configs"
-                        $filePath = Join-Path $configPath $fileName
-
-                        $config | Out-File -FilePath $filePath -Encoding UTF8
-
-                        Write-Host "Backup réussi pour $($device.Name)" -ForegroundColor Green
+                            # Joindre toutes les parties de la config
+                            $finalConfig = $config -join ""
+                            
+                            # Vérifier que le contenu n'est pas vide
+                            if ($finalConfig.Trim().Length -gt 0) {
+                                $finalConfig | Out-File -FilePath $filePath -Encoding UTF8
+                                Write-Host "  Backup réussi pour $($device.Name) - Taille: $($finalConfig.Length) caractères" -ForegroundColor Green
+                            } else {
+                                throw "Configuration vide après traitement"
+                            }
+                        } else {
+                            throw "Aucune donnée de configuration récupérée"
+                        }
                     } else {
-                        throw "Aucune donnée de configuration récupérée"
+                        throw "Impossible de créer le stream SSH"
                     }
+                } else {
+                    throw "Impossible d'établir la connexion SSH"
                 }
             }
             catch {
                 Write-Error "Erreur lors du backup de $($device.Name): $_"
             }
             finally {
+                # Nettoyage des ressources dans l'ordre inverse
                 if ($sshStream) {
-                    $sshStream.Dispose()
+                    try {
+                        $sshStream.Close()
+                        $sshStream.Dispose()
+                        Write-Debug "Stream SSH fermé pour $($device.Name)"
+                    }
+                    catch {
+                        Write-Warning "Erreur lors de la fermeture du stream SSH: $_"
+                    }
                 }
+                
                 if ($sshSession) {
-                    Remove-SSHSession -SessionId $sshSession.SessionId
+                    try {
+                        Remove-SSHSession -SessionId $sshSession.SessionId
+                        Write-Debug "Session SSH fermée pour $($device.Name)"
+                    }
+                    catch {
+                        Write-Warning "Erreur lors de la fermeture de la session SSH: $_"
+                    }
                 }
             }
         }
+        
+        # Ajouter les nouveaux fichiers au repository SVN
         Add-NewFiles -Path (Join-Path $backupPath "configs")
     }
     catch {
@@ -282,4 +403,3 @@ function Backup-NetworkDevices {
 
 # Exécuter le backup
 Backup-NetworkDevices
-
