@@ -478,7 +478,7 @@ Backup-NetworkDevices,
     return $output
 }
 
-# Fonction pour obtenir la configuration selon le type d'équipement et les commandes
+# Fonction pour obtenir la configuration selon le type de devices et les commandes
 function Get-DeviceConfig {
     param (
         $device,
