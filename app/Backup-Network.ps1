@@ -171,14 +171,17 @@ function Read-CommandOutput {
     param (
         $sshStream,
         [string]$command,
-        [int]$maxWaitSeconds = 120,
-        [string]$endPattern = '[\$#>]\s*$'
+        [int]$maxWaitSeconds = 300,
+        [string]$endPattern = '[\$#>]\s*$',
+        [string[]]$morePatterns = @('--More--', '--- More ---', '-- More --', 'Press any key to continue', '\[42D +\[42D', '\[K--More--\[K', '\[7m--More--\[27m')
     )
     
     $output = ""
     $startTime = Get-Date
     $lastDataTime = Get-Date
-    $stableDataTimeout = 10 # Attendre 10 secondes sans nouvelles données
+    $stableDataTimeout = 20
+    $iterationCount = 0
+    $paginationCount = 0
     
     Write-Host "    Lecture de la sortie pour: $command" -ForegroundColor Cyan
     
@@ -188,32 +191,80 @@ function Read-CommandOutput {
         if ($newData) {
             $output += $newData
             $lastDataTime = Get-Date
+            $iterationCount++
             
-            # Vérifier si on a atteint la fin (prompt)
+            # Afficher un point de progression toutes les 100 itérations
+            if ($iterationCount % 100 -eq 0) {
+                Write-Host "." -NoNewline -ForegroundColor Cyan
+            }
+            
+            # Vérifier s'il y a une pagination en cours
+            $foundMorePattern = $false
+            foreach ($morePattern in $morePatterns) {
+                if ($output -match $morePattern) {
+                    $paginationCount++
+                    Write-Host "`n    Pagination détectée #$paginationCount ($morePattern), envoi d'espace..." -ForegroundColor Yellow
+                    $sshStream.WriteLine(" ")
+                    Start-Sleep -Milliseconds 1000
+                    $foundMorePattern = $true
+                    
+                    # Nettoyer le pattern de pagination de la sortie
+                    $output = $output -replace [regex]::Escape($morePattern), ''
+                    break
+                }
+            }
+            
+            # Si on a trouvé une pagination, continuer la boucle
+            if ($foundMorePattern) {
+                continue
+            }
+            
+            # Vérifier si on a atteint la fin (prompt) seulement si pas de pagination
             if ($output -match $endPattern) {
-                Write-Host "    Fin de commande détectée" -ForegroundColor Green
-                break
+                # Vérifier que ce n'est pas un faux positif au milieu de la sortie
+                $lines = $output -split "`n"
+                $lastLines = $lines[-10..-1] | Where-Object { $_.Trim() }
+                
+                $foundPromptAtEnd = $false
+                foreach ($line in $lastLines) {
+                    if ($line -match $endPattern -and $line.Trim().Length -lt 100) {
+                        $foundPromptAtEnd = $true
+                        break
+                    }
+                }
+                
+                if ($foundPromptAtEnd) {
+                    Write-Host "`n    Fin de commande détectée (après $paginationCount paginations)" -ForegroundColor Green
+                    break
+                }
             }
         } else {
             # Pas de nouvelles données, vérifier le timeout
             if (((Get-Date) - $lastDataTime).TotalSeconds -gt $stableDataTimeout) {
-                Write-Host "    Timeout de stabilité atteint (pas de nouvelles données)" -ForegroundColor Yellow
+                Write-Host "`n    Timeout de stabilité atteint après $paginationCount paginations" -ForegroundColor Yellow
                 break
             }
         }
         
-        Start-Sleep -Milliseconds 100
+        Start-Sleep -Milliseconds 200
     }
     
     if (((Get-Date) - $startTime).TotalSeconds -ge $maxWaitSeconds) {
-        Write-Warning "Timeout global atteint pour la commande: $command"
+        Write-Warning "`nTimeout global atteint pour la commande: $command (après $paginationCount paginations)"
     }
     
-    Write-Host "    Taille de sortie récupérée: $($output.Length) caractères" -ForegroundColor Cyan
+    Write-Host "`n    Taille de sortie récupérée: $($output.Length) caractères avec $paginationCount paginations" -ForegroundColor Cyan
+    
+    # Compter approximativement le nombre d'interfaces pour validation
+    $interfaceCount = ($output | Select-String -Pattern "interface.*Ethernet" -AllMatches).Matches.Count
+    if ($interfaceCount -gt 0) {
+        Write-Host "    Nombre d'interfaces détectées: $interfaceCount" -ForegroundColor Cyan
+    }
+    
     return $output
 }
 
-# Fonction pour obtenir la configuration selon le type d'équipement et les commandes
+# Fonction pour obtenir la configuration selon le type d'equipement et les commandes
 function Get-DeviceConfig {
     param (
         $device,
@@ -239,12 +290,12 @@ function Get-DeviceConfig {
                 if ($part.Trim()) {
                     Write-Host "    Envoi de: $($part.Trim())" -ForegroundColor Gray
                     $sshStream.WriteLine($part.Trim())
-                    Start-Sleep -Seconds 1
+                    Start-Sleep -Seconds 2
                 }
             }
             
             # Attendre un peu que la commande soit envoyée
-            Start-Sleep -Seconds 3
+            Start-Sleep -Seconds 5
             
             # Lire la sortie complète avec timeout étendu et gestion de pagination
             $result = Read-CommandOutput -sshStream $sshStream -command $command -maxWaitSeconds 300
@@ -272,6 +323,7 @@ function Get-DeviceConfig {
                     'Press any key to continue',
                     '\[42D +\[42D',
                     '\[K--More--\[K',
+                    '\[7m--More--\[27m',
                     '[^\x20-\x7E\n\r\t]'         # Tous les caractères non-imprimables sauf les sauts de ligne, retours chariot et tabulations
                 )
 
