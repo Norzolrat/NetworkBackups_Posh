@@ -32,7 +32,7 @@ function Get-CredentialFromEnvOrSecrets {
         throw "❌ Aucun mot de passe trouvé (ni secret ni variable d’environnement)"
     }
 
-    Write-Host "DEBUG :: Valeur brute du mot de passe : '$password'"
+    # Write-Host "DEBUG :: Valeur brute du mot de passe : '$password'"
 
     # 3. Convertir en SecureString
     $secure = ConvertTo-SecureString $password -AsPlainText -Force
