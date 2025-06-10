@@ -142,7 +142,7 @@ function Wait-ForPrompt {
     param (
         $sshStream,
         [string]$promptPattern = '[\$#>]\s*$',
-        [int]$maxWaitSeconds = 30
+        [int]$maxWaitSeconds = 90
     )
     
     $startTime = Get-Date
@@ -275,7 +275,7 @@ function Get-DeviceConfig {
     
     # Attendre que la connexion soit stable
     Write-Host "  Attente de stabilisation de la connexion..." -ForegroundColor Cyan
-    if (-not (Wait-ForPrompt -sshStream $sshStream -maxWaitSeconds 30)) {
+    if (-not (Wait-ForPrompt -sshStream $sshStream -maxWaitSeconds 90)) {
         throw "Impossible d'établir une connexion stable"
     }
 
@@ -405,7 +405,7 @@ function Backup-NetworkDevices {
 
                 # Établir la connexion SSH avec timeout étendu
                 Write-Host "  Établissement de la connexion SSH..." -ForegroundColor Cyan
-                $sshSession = New-SSHSession -ComputerName $device.IP -Credential $credential -AcceptKey -Force -ConnectionTimeout 30
+                $sshSession = New-SSHSession -ComputerName $device.IP -Credential $credential -AcceptKey -Force -ConnectionTimeout 90
                 
                 if ($sshSession) {
                     Write-Host "  Connexion SSH établie (SessionId: $($sshSession.SessionId))" -ForegroundColor Green
