@@ -142,11 +142,13 @@ function Wait-ForPrompt {
     param (
         $sshStream,
         [string]$promptPattern = '[\$#>]\s*$',
-        [int]$maxWaitSeconds = 90
+        [int]$maxWaitSeconds = 60  # Augmenté à 60s
     )
     
     $startTime = Get-Date
     $buffer = ""
+    
+    Write-Host "  [DEBUG] Attente du prompt..." -ForegroundColor Magenta
     
     while (((Get-Date) - $startTime).TotalSeconds -lt $maxWaitSeconds) {
         Start-Sleep -Milliseconds 500
@@ -154,14 +156,17 @@ function Wait-ForPrompt {
         
         if ($newData) {
             $buffer += $newData
+            Write-Host "  [DEBUG] Reçu: '$newData'" -ForegroundColor Magenta
+            
             # Vérifier si on a un prompt
             if ($buffer -match $promptPattern) {
-                Write-Debug "Prompt détecté: $($matches[0])"
+                Write-Host "  [DEBUG] Prompt détecté: $($matches[0])" -ForegroundColor Green
                 return $true
             }
         }
     }
     
+    Write-Host "  [DEBUG] Buffer final: '$buffer'" -ForegroundColor Red
     Write-Warning "Timeout en attendant le prompt après $maxWaitSeconds secondes"
     return $false
 }
