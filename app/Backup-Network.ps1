@@ -138,10 +138,11 @@ function Clean-TheConf {
 }
 
 # Fonction pour attendre que le prompt soit prêt
+# Fonction pour attendre que le prompt soit prêt - Version corrigée v2
 function Wait-ForPrompt {
     param (
         $sshStream,
-        [string]$promptPattern = '[\$#>]\s*$',
+        [string]$promptPattern = '[\$#>]\s*,
         [int]$maxWaitSeconds = 60
     )
     
@@ -158,42 +159,62 @@ function Wait-ForPrompt {
             $buffer += $newData
             Write-Host "  [DEBUG] Reçu: '$newData'" -ForegroundColor Magenta
             
-            # Nettoyer les séquences ANSI du buffer pour la détection
-            $cleanBuffer = $buffer -replace '\x1B\[[0-9;]*[a-zA-Z]', ''
-            $cleanBuffer = $cleanBuffer -replace '\[[0-9;]*[a-zA-Z]', ''
+            # Nettoyage agressif des séquences ANSI et caractères de contrôle
+            $cleanBuffer = $buffer
+            
+            # Patterns de nettoyage étendus
+            $cleanPatterns = @(
+                '\x1B\[[0-9;]*[a-zA-Z]',        # Séquences ANSI classiques  
+                '\x1B\[[0-9;]*R',               # Réponses de position curseur
+                '\[[0-9;]*R',                   # Variante sans ESC
+                '\[[0-9;]*[a-zA-Z]',            # Autres séquences
+                '\x1B\][0-9;]*\x07',            # Séquences OSC
+                '[^\x20-\x7E\n\r\t]'           # Caractères non-imprimables
+            )
+            
+            foreach ($pattern in $cleanPatterns) {
+                $cleanBuffer = $cleanBuffer -replace $pattern, ''
+            }
             
             Write-Host "  [DEBUG] Buffer nettoyé: '$cleanBuffer'" -ForegroundColor Cyan
             
-            # Vérifier différents patterns de prompt courants
+            # Normaliser les sauts de ligne et espaces
+            $normalizedBuffer = $cleanBuffer -replace '(\r\n|\r|\n)', "`n"
+            $normalizedBuffer = $normalizedBuffer.Trim()
+            
+            Write-Host "  [DEBUG] Buffer normalisé: '$normalizedBuffer'" -ForegroundColor Yellow
+            
+            # Vérifier différents patterns de prompt
             $promptPatterns = @(
-                '[\$#>]\s*$',                    # Pattern original
-                '[\$#>]\s*\r?\n?\s*$',          # Avec retours chariot/saut de ligne
-                '#\s*$',                         # Juste # avec espaces
-                '>\s*$',                         # Juste > avec espaces  
-                '\$\s*$',                        # Juste $ avec espaces
-                '[a-zA-Z0-9\-_]+[\$#>]\s*$'    # Nom + prompt
+                '#\s*,                         # Juste # avec espaces optionnels
+                '>\s*,                         # Juste > avec espaces optionnels
+                '\$\s*,                        # Juste $ avec espaces optionnels
+                '[a-zA-Z0-9\-_]+#\s*,        # Nom + # 
+                '[a-zA-Z0-9\-_]+>\s*,        # Nom + >
+                '[a-zA-Z0-9\-_]+\$\s*        # Nom + $
             )
             
             foreach ($pattern in $promptPatterns) {
-                if ($cleanBuffer -match $pattern) {
-                    Write-Host "  [DEBUG] Prompt détecté avec pattern '$pattern': $($matches[0])" -ForegroundColor Green
+                if ($normalizedBuffer -match $pattern) {
+                    Write-Host "  [DEBUG] ✅ Prompt détecté avec pattern '$pattern': '$($matches[0])'" -ForegroundColor Green
                     return $true
                 }
             }
             
-            # Vérification spéciale pour les prompts multi-lignes comme Aruba
-            $lines = $cleanBuffer -split "`n"
-            $lastLine = $lines[-1].Trim()
-            
-            if ($lastLine -match '[\$#>]\s*$') {
-                Write-Host "  [DEBUG] Prompt détecté sur dernière ligne: '$lastLine'" -ForegroundColor Green
-                return $true
+            # Vérification ligne par ligne pour les prompts multi-lignes
+            $lines = $normalizedBuffer -split "`n"
+            foreach ($line in $lines) {
+                $trimmedLine = $line.Trim()
+                if ($trimmedLine -and $trimmedLine -match '[a-zA-Z0-9\-_]+[\$#>]\s*) {
+                    Write-Host "  [DEBUG] ✅ Prompt détecté sur ligne: '$trimmedLine'" -ForegroundColor Green
+                    return $true
+                }
             }
         }
     }
     
-    Write-Host "  [DEBUG] Buffer final: '$buffer'" -ForegroundColor Red
-    Write-Host "  [DEBUG] Buffer final nettoyé: '$($buffer -replace '\x1B\[[0-9;]*[a-zA-Z]', '')'" -ForegroundColor Red
+    Write-Host "  [DEBUG] ❌ Buffer final brut: '$buffer'" -ForegroundColor Red
+    Write-Host "  [DEBUG] ❌ Buffer final nettoyé: '$($buffer -replace '[^\x20-\x7E\n\r\t]', '')'" -ForegroundColor Red
     Write-Warning "Timeout en attendant le prompt après $maxWaitSeconds secondes"
     return $false
 }
