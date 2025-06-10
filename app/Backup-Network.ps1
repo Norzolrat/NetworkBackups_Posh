@@ -142,7 +142,7 @@ function Wait-ForPrompt {
     param (
         $sshStream,
         [string]$promptPattern = '[\$#>]\s*$',
-        [int]$maxWaitSeconds = 60  # Augmenté à 60s
+        [int]$maxWaitSeconds = 60
     )
     
     $startTime = Get-Date
@@ -158,15 +158,42 @@ function Wait-ForPrompt {
             $buffer += $newData
             Write-Host "  [DEBUG] Reçu: '$newData'" -ForegroundColor Magenta
             
-            # Vérifier si on a un prompt
-            if ($buffer -match $promptPattern) {
-                Write-Host "  [DEBUG] Prompt détecté: $($matches[0])" -ForegroundColor Green
+            # Nettoyer les séquences ANSI du buffer pour la détection
+            $cleanBuffer = $buffer -replace '\x1B\[[0-9;]*[a-zA-Z]', ''
+            $cleanBuffer = $cleanBuffer -replace '\[[0-9;]*[a-zA-Z]', ''
+            
+            Write-Host "  [DEBUG] Buffer nettoyé: '$cleanBuffer'" -ForegroundColor Cyan
+            
+            # Vérifier différents patterns de prompt courants
+            $promptPatterns = @(
+                '[\$#>]\s*$',                    # Pattern original
+                '[\$#>]\s*\r?\n?\s*$',          # Avec retours chariot/saut de ligne
+                '#\s*$',                         # Juste # avec espaces
+                '>\s*$',                         # Juste > avec espaces  
+                '\$\s*$',                        # Juste $ avec espaces
+                '[a-zA-Z0-9\-_]+[\$#>]\s*$'    # Nom + prompt
+            )
+            
+            foreach ($pattern in $promptPatterns) {
+                if ($cleanBuffer -match $pattern) {
+                    Write-Host "  [DEBUG] Prompt détecté avec pattern '$pattern': $($matches[0])" -ForegroundColor Green
+                    return $true
+                }
+            }
+            
+            # Vérification spéciale pour les prompts multi-lignes comme Aruba
+            $lines = $cleanBuffer -split "`n"
+            $lastLine = $lines[-1].Trim()
+            
+            if ($lastLine -match '[\$#>]\s*$') {
+                Write-Host "  [DEBUG] Prompt détecté sur dernière ligne: '$lastLine'" -ForegroundColor Green
                 return $true
             }
         }
     }
     
     Write-Host "  [DEBUG] Buffer final: '$buffer'" -ForegroundColor Red
+    Write-Host "  [DEBUG] Buffer final nettoyé: '$($buffer -replace '\x1B\[[0-9;]*[a-zA-Z]', '')'" -ForegroundColor Red
     Write-Warning "Timeout en attendant le prompt après $maxWaitSeconds secondes"
     return $false
 }
