@@ -139,6 +139,7 @@ function Clean-TheConf {
 
 # Fonction pour attendre que le prompt soit prêt
 # Fonction pour attendre que le prompt soit prêt - Version corrigée v2
+# Fonction pour attendre que le prompt soit prêt - Version corrigée v2
 function Wait-ForPrompt {
     param (
         $sshStream,
@@ -157,7 +158,7 @@ function Wait-ForPrompt {
         
         if ($newData) {
             $buffer += $newData
-            Write-Host "  [DEBUG] Reçu: '$newData'" -ForegroundColor Magenta
+            Write-Host "  [DEBUG] Recu: '$newData'" -ForegroundColor Magenta
             
             # Nettoyage agressif des séquences ANSI et caractères de contrôle
             $cleanBuffer = $buffer
