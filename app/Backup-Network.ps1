@@ -165,6 +165,9 @@ function Wait-ForPrompt {
             $cleanBuffer = $cleanBuffer -replace '\[[0-9;]*R', ''
             $cleanBuffer = $cleanBuffer.Trim()
             
+            # Supprimer les lignes vides
+            $cleanBuffer = ($cleanBuffer -split "`n" | Where-Object { $_.Trim() }) -join "`n"
+            
             Write-Host "  [DEBUG] Buffer nettoyé: '$cleanBuffer'" -ForegroundColor Cyan
             
             # Vérifier différents patterns de prompt courants
