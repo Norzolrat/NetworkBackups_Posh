@@ -176,7 +176,7 @@ function Wait-ForPrompt {
                 '\$\s*$',                        # Juste $ avec espaces
                 '[a-zA-Z0-9\-_]+[\$#>]\s*$'    # Nom + prompt
             )
-            
+
             foreach ($pattern in $promptPatterns) {
                 if ($cleanBuffer -match $pattern) {
                     Write-Host "  [DEBUG] Prompt détecté avec pattern '$pattern': $($matches[0])" -ForegroundColor Green
