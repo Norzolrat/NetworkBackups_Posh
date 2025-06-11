@@ -161,6 +161,8 @@ function Wait-ForPrompt {
             # Nettoyer les séquences ANSI du buffer pour la détection
             $cleanBuffer = $buffer -replace '\x1B\[[0-9;]*[a-zA-Z]', ''
             $cleanBuffer = $cleanBuffer -replace '\[[0-9;]*[a-zA-Z]', ''
+            $cleanBuffer = $cleanBuffer -replace '\[[0-9;]*R', ''
+            $cleanBuffer = $cleanBuffer.Trim()  # Enlever espaces et sauts de ligne
             
             Write-Host "  [DEBUG] Buffer nettoyé: '$cleanBuffer'" -ForegroundColor Cyan
             
