@@ -170,29 +170,9 @@ function Wait-ForPrompt {
             
             Write-Host "  [DEBUG] Buffer nettoyé: '$cleanBuffer'" -ForegroundColor Cyan
             
-            # Vérifier différents patterns de prompt courants
-            $promptPatterns = @(
-                '[\$#>]\s*$',                    # Pattern original
-                '[\$#>]\s*\r?\n?\s*$',          # Avec retours chariot/saut de ligne
-                '#\s*$',                         # Juste # avec espaces
-                '>\s*$',                         # Juste > avec espaces  
-                '\$\s*$',                        # Juste $ avec espaces
-                '[a-zA-Z0-9\-_]+[\$#>]\s*$'    # Nom + prompt
-            )
-
-            foreach ($pattern in $promptPatterns) {
-                if ($cleanBuffer -match $pattern) {
-                    Write-Host "  [DEBUG] Prompt détecté avec pattern '$pattern': $($matches[0])" -ForegroundColor Green
-                    return $true
-                }
-            }
-            
-            # Vérification spéciale pour les prompts multi-lignes comme Aruba
-            $lines = $cleanBuffer -split "`n"
-            $lastLine = $lines[-1].Trim()
-            
-            if ($lastLine -match '[\$#>]\s*$') {
-                Write-Host "  [DEBUG] Prompt détecté sur dernière ligne: '$lastLine'" -ForegroundColor Green
+           # Vérifier si le buffer contient un caractère de prompt
+            if ($cleanBuffer -match '[#>$]') {
+                Write-Host "  [DEBUG] Prompt detecte - caractere trouve" -ForegroundColor Green
                 return $true
             }
         }
