@@ -61,14 +61,71 @@ function Test-AdminCredentials {
     )
 
     $expectedUser = $env:ADMIN_USER
-    $expectedPassword = $env:ADMIN_PASSWORD
+    $passwordHash = $env:ADMIN_PASSWORD_HASH
 
-    if (-not $expectedUser -or -not $expectedPassword) {
-        Write-Warning "ADMIN_USER/ADMIN_PASSWORD non configurés : connexion admin impossible"
+    if (-not $expectedUser) {
+        Write-Warning "ADMIN_USER non configuré : connexion admin impossible"
         return $false
     }
 
-    return (Test-ConstantTimeEquals $username $expectedUser) -and (Test-ConstantTimeEquals $password $expectedPassword)
+    # Les deux vérifications sont toujours évaluées (pas de court-circuit),
+    # pour ne pas révéler par le temps de réponse si l'identifiant est valide
+    $userOk = Test-ConstantTimeEquals $username $expectedUser
+
+    if ($passwordHash) {
+        $passwordOk = Test-Argon2Hash -password $password -encodedHash $passwordHash
+    } elseif ($env:ADMIN_PASSWORD) {
+        Write-Warning "ADMIN_PASSWORD en clair est déprécié : générez un hash avec New-AdminHash.ps1 et utilisez ADMIN_PASSWORD_HASH"
+        $passwordOk = Test-ConstantTimeEquals $password $env:ADMIN_PASSWORD
+    } else {
+        Write-Warning "ADMIN_PASSWORD_HASH non configuré : connexion admin impossible"
+        $passwordOk = $false
+    }
+
+    return ($userOk -and $passwordOk)
+}
+
+# Verrouillage anti-brute-force : après N échecs depuis une même IP, le login
+# est bloqué quelques minutes (état en mémoire, serveur mono-thread)
+$script:LoginFailures = @{}
+$script:LoginMaxAttempts = 5
+$script:LoginLockSeconds = 300
+
+function Test-LoginLocked {
+    param([string]$clientIp)
+
+    $entry = $script:LoginFailures[$clientIp]
+    if (-not $entry) { return $false }
+
+    if ($entry.LockedUntil -and (Get-Date) -lt $entry.LockedUntil) {
+        return $true
+    }
+    if ($entry.LockedUntil -and (Get-Date) -ge $entry.LockedUntil) {
+        $script:LoginFailures.Remove($clientIp)   # verrou expiré : on repart de zéro
+    }
+    return $false
+}
+
+function Register-LoginFailure {
+    param([string]$clientIp)
+
+    if (-not $script:LoginFailures.ContainsKey($clientIp)) {
+        $script:LoginFailures[$clientIp] = @{ Count = 0; LockedUntil = $null }
+    }
+    $entry = $script:LoginFailures[$clientIp]
+    $entry.Count++
+    if ($entry.Count -ge $script:LoginMaxAttempts) {
+        $entry.LockedUntil = (Get-Date).AddSeconds($script:LoginLockSeconds)
+        Write-Warning "Login verrouillé $($script:LoginLockSeconds)s pour $clientIp après $($entry.Count) échecs"
+    }
+}
+
+function Clear-LoginFailures {
+    param([string]$clientIp)
+
+    if ($script:LoginFailures.ContainsKey($clientIp)) {
+        $script:LoginFailures.Remove($clientIp)
+    }
 }
 
 function Get-LoginForm {
@@ -103,14 +160,20 @@ function Get-LoginForm {
 function Handle-Login {
     param(
         [string]$method,
-        [hashtable]$postParams
+        [hashtable]$postParams,
+        [string]$clientIp
     )
 
     if ($method -eq 'POST') {
+        if (Test-LoginLocked -clientIp $clientIp) {
+            return Get-LoginForm -errorMessage "Trop de tentatives échouées. Réessayez dans quelques minutes."
+        }
+
         $username = $postParams['username']
         $password = $postParams['password']
 
         if (Test-AdminCredentials -username $username -password $password) {
+            Clear-LoginFailures -clientIp $clientIp
             $session = New-Session
             $cookie = [System.Net.Cookie]::new('session', $session.Token, '/')
             $cookie.HttpOnly = $true
@@ -118,6 +181,7 @@ function Handle-Login {
             return @{ Redirect = '/admin'; Cookie = $cookie }
         }
 
+        Register-LoginFailure -clientIp $clientIp
         return Get-LoginForm -errorMessage "Identifiants invalides"
     }
 

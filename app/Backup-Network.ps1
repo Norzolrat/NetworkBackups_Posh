@@ -7,32 +7,13 @@ Import-Module Posh-SSH
 
 # Chemins des fichiers de configuration
 $configPath = "$PSScriptRoot\devices.json"
-$credentialPath = "$PSScriptRoot\credentials.xml"
 $backupPath = "$PSScriptRoot\NetworkBackups"
+$connectorsPath = "$PSScriptRoot/secrets/connectors.xml"
+$legacyConnectorsPath = "$PSScriptRoot/secrets/connectors.json"
 
 # Marqueurs de pagination des équipements réseau, utilisés à la fois pour la
 # détection en direct (Read-CommandOutput) et pour le nettoyage a posteriori (Get-DeviceConfig)
 $script:MorePatterns = @('--More--', '--- More ---', '-- More --', 'Press any key to continue', '\[42D +\[42D', '\[K--More--\[K', '\[7m--More--\[27m')
-
-# Fonction pour créer le fichier de credentials de manière interactive
-function New-CredentialFile {
-    param (
-        [string]$Path
-    )
-
-    Write-Host "Création du fichier de credentials..." -ForegroundColor Yellow
-
-    $username = Read-Host "Entrez l'identifiant pour tous les équipements"
-    $password = Read-Host "Entrez le mot de passe" -AsSecureString
-
-    $credential = New-Object System.Management.Automation.PSCredential($username, $password)
-
-    # Exporter les credentials
-    $credential | Export-Clixml -Path $Path
-    Write-Host "`nFichier de credentials créé avec succès: $Path" -ForegroundColor Green
-
-    return $credential
-}
 
 # Import des configurations
 function Import-DeviceConfig {
@@ -44,20 +25,94 @@ function Import-DeviceConfig {
     }
 }
 
-# Import des credentials avec création si nécessaire
-function Import-DeviceCredentials {
-    if (-not (Test-Path $credentialPath)) {
-        Write-Host "Fichier de credentials non trouvé: $credentialPath" -ForegroundColor Yellow
-        $createNew = Read-Host "Voulez-vous créer un nouveau fichier de credentials? (O/N)"
+# Import des connecteurs d'authentification (table vide si le fichier est absent).
+# Format courant : connectors.xml (clixml, secrets en SecureString, comme credentials.xml).
+# Repli : connectors.json v1 non migré (la migration s'effectue au premier affichage de l'admin).
+function Import-Connectors {
+    $connectors = @{}
+    $entries = @()
 
-        if ($createNew -eq "O") {
-            return New-CredentialFile -Path $credentialPath
-        } else {
-            throw "Le fichier de credentials est nécessaire pour continuer."
+    if (Test-Path $connectorsPath) {
+        try {
+            $imported = Import-Clixml -Path $connectorsPath
+            # Format courant : objet racine avec propriété 'connectors'. Compat : racine tableau,
+            # qu'Import-Clixml peut renvoyer comme UN seul objet collection selon la version de PowerShell.
+            if ($imported -and $imported.PSObject.Properties.Name -contains 'connectors') {
+                foreach ($item in $imported.connectors) { $entries += $item }
+            } else {
+                foreach ($item in @($imported)) {
+                    if ($item -is [System.Collections.ICollection]) {
+                        foreach ($sub in $item) { $entries += $sub }
+                    } else {
+                        $entries += $item
+                    }
+                }
+            }
+        } catch {
+            Write-Warning "connectors.xml illisible, connecteurs ignorés : $($_.Exception.Message)"
         }
-    } else {
-        return Import-Clixml -Path $credentialPath
+    } elseif (Test-Path $legacyConnectorsPath) {
+        Write-Warning "connectors.json au format hérité : ouvrez l'admin web pour migrer vers connectors.xml"
+        try {
+            $entries = @((Get-Content $legacyConnectorsPath -Raw | ConvertFrom-Json).connectors)
+        } catch {
+            Write-Warning "connectors.json illisible, connecteurs ignorés : $($_.Exception.Message)"
+        }
     }
+
+    foreach ($connector in $entries) {
+        $connectors[$connector.Name] = $connector
+    }
+    return $connectors
+}
+
+# Récupère la valeur en clair d'un SecureString (le temps d'un usage ponctuel)
+function ConvertFrom-SecureStringToPlain {
+    param([System.Security.SecureString]$secure)
+
+    return [System.Net.NetworkCredential]::new('', $secure).Password
+}
+
+# Convertit un secret de connecteur (SecureString depuis clixml, ou chaîne du format hérité)
+function ConvertTo-SecretSecureString {
+    param($secret)
+
+    if ($secret -is [System.Security.SecureString]) { return $secret }
+    if ($secret) { return (ConvertTo-SecureString $secret -AsPlainText -Force) }
+    return (New-Object System.Security.SecureString)
+}
+
+# Résout l'authentification d'un équipement via son connecteur (obligatoire)
+function Resolve-DeviceAuth {
+    param (
+        $device,
+        [hashtable]$connectors
+    )
+
+    if (-not $device.Connector) {
+        throw "Aucun connecteur défini pour cet équipement : assignez-en un dans l'admin web (Équipements)"
+    }
+
+    $connector = $connectors[$device.Connector]
+    if (-not $connector) {
+        throw "Connecteur '$($device.Connector)' introuvable dans le magasin de connecteurs"
+    }
+
+    if ($connector.Type -eq 'sshkey') {
+        $credential = New-Object System.Management.Automation.PSCredential($connector.Username, (ConvertTo-SecretSecureString $connector.Passphrase))
+
+        if ($connector.KeyContent) {
+            return @{ Credential = $credential; KeyFile = $null; KeyContent = $connector.KeyContent }
+        }
+        # Format hérité : clé encore stockée en fichier
+        if (-not $connector.KeyFile -or -not (Test-Path $connector.KeyFile)) {
+            throw "Clé privée du connecteur '$($connector.Name)' introuvable : $($connector.KeyFile)"
+        }
+        return @{ Credential = $credential; KeyFile = $connector.KeyFile; KeyContent = $null }
+    }
+
+    $credential = New-Object System.Management.Automation.PSCredential($connector.Username, (ConvertTo-SecretSecureString $connector.Password))
+    return @{ Credential = $credential; KeyFile = $null; KeyContent = $null }
 }
 
 # Création du repo SVN
@@ -413,7 +468,7 @@ function Backup-NetworkDevices {
 
     try {
         $devices = Import-DeviceConfig
-        $credential = Import-DeviceCredentials
+        $connectors = Import-Connectors
 
         $successCount = 0
         $failedDevices = @()
@@ -421,7 +476,8 @@ function Backup-NetworkDevices {
         foreach ($device in $devices) {
             $sshSession = $null
             $sshStream = $null
-            
+            $tempKeyFile = $null
+
             try {
                 Write-Host "`nTraitement de $($device.Name) ($($device.IP))..." -ForegroundColor Yellow
 
@@ -431,10 +487,29 @@ function Backup-NetworkDevices {
                     continue
                 }
 
+                # Résoudre l'authentification via le connecteur de l'équipement
+                $auth = Resolve-DeviceAuth -device $device -connectors $connectors
+
                 # Établir la connexion SSH avec timeout étendu
                 # (le warning "Host key is not being verified" est masqué : conséquence assumée de -AcceptKey -Force)
                 Write-Verbose "Établissement de la connexion SSH..."
-                $sshSession = New-SSHSession -ComputerName $device.IP -Credential $credential -AcceptKey -Force -ConnectionTimeout 90 -WarningAction SilentlyContinue
+                if ($auth.KeyFile -or $auth.KeyContent) {
+                    $keyFile = $auth.KeyFile
+                    if ($auth.KeyContent) {
+                        # La clé n'existe qu'en SecureString : matérialisation éphémère en tmpfs
+                        # (jamais sur disque), supprimée dans le finally
+                        $tempKeyRoot = if (Test-Path '/dev/shm') { '/dev/shm' } else { [System.IO.Path]::GetTempPath() }
+                        $tempKeyFile = Join-Path $tempKeyRoot "nbkey-$([guid]::NewGuid().ToString('N'))"
+                        Set-Content -Path $tempKeyFile -Value (ConvertFrom-SecureStringToPlain $auth.KeyContent) -NoNewline
+                        chmod 600 $tempKeyFile
+                        $keyFile = $tempKeyFile
+                    }
+                    Write-Verbose "Authentification via le connecteur '$($device.Connector)' (clé SSH)"
+                    $sshSession = New-SSHSession -ComputerName $device.IP -Credential $auth.Credential -KeyFile $keyFile -AcceptKey -Force -ConnectionTimeout 90 -WarningAction SilentlyContinue
+                } else {
+                    Write-Verbose "Authentification via le connecteur '$($device.Connector)' (mot de passe)"
+                    $sshSession = New-SSHSession -ComputerName $device.IP -Credential $auth.Credential -AcceptKey -Force -ConnectionTimeout 90 -WarningAction SilentlyContinue
+                }
 
                 if ($sshSession) {
                     Write-Verbose "Connexion SSH établie (SessionId: $($sshSession.SessionId))"
@@ -480,6 +555,11 @@ function Backup-NetworkDevices {
                 $failedDevices += $device.Name
             }
             finally {
+                # La clé matérialisée en tmpfs ne doit pas survivre à la connexion
+                if ($tempKeyFile -and (Test-Path $tempKeyFile)) {
+                    Remove-Item $tempKeyFile -Force
+                }
+
                 # Nettoyage des ressources dans l'ordre inverse
                 if ($sshStream) {
                     try {

@@ -10,6 +10,11 @@ function Handle-AdminDashboard {
         <h3>Équipements</h3>
         <p>Visualiser et éditer devices.json (une sauvegarde .bak est faite avant chaque écriture).</p>
     </a>
+    <a class='card action-card' href='/admin/connectors'>
+        <svg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4'></path></svg>
+        <h3>Connecteurs</h3>
+        <p>Gérer les identifiants et clés SSH utilisés pour se connecter aux équipements.</p>
+    </a>
     <a class='card action-card' href='/admin/logs'>
         <svg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'></path><polyline points='14 2 14 8 20 8'></polyline><line x1='16' y1='13' x2='8' y2='13'></line><line x1='16' y1='17' x2='8' y2='17'></line></svg>
         <h3>Journaux</h3>
@@ -62,9 +67,18 @@ function Handle-AdminDevices {
             if (-not ($parsed.PSObject.Properties.Name -contains 'devices') -or $parsed.devices -isnot [System.Collections.IEnumerable]) {
                 $validationError = "propriété 'devices' absente ou invalide"
             } else {
+                $knownConnectors = Get-ConnectorNames
                 foreach ($device in $parsed.devices) {
                     if (-not $device.Name -or -not $device.IP) {
                         $validationError = "chaque équipement doit avoir au minimum un Name et une IP"
+                        break
+                    }
+                    if (-not $device.Connector) {
+                        $validationError = "aucun connecteur défini pour $($device.Name) : le champ Connector est obligatoire"
+                        break
+                    }
+                    if ($knownConnectors -notcontains $device.Connector) {
+                        $validationError = "connecteur inconnu pour $($device.Name) : '$($device.Connector)'"
                         break
                     }
                 }
@@ -84,9 +98,14 @@ function Handle-AdminDevices {
     # Injection dans un <script> : neutralise '<' pour empêcher toute fermeture prématurée du tag
     $jsonForScript = $currentContent.Replace('<', '\' + 'u003c')
 
+    # Noms des connecteurs disponibles pour le select du formulaire (jamais les secrets).
+    # @() force un tableau JSON même avec un seul connecteur (le retour de fonction déroule les tableaux)
+    $connectorsJson = ConvertTo-Json -InputObject @(Get-ConnectorNames) -Compress
+
     return @"
 $message
 <script type="application/json" id="devicesData">$jsonForScript</script>
+<script type="application/json" id="connectorsData">$connectorsJson</script>
 <form method='POST' action='/admin/devices' id='devicesForm'>
     <input type='hidden' name='csrf' value='$($session.Csrf)'>
     <input type='hidden' name='devicesJson' id='devicesJson'>
@@ -113,6 +132,10 @@ $message
                 <label for='devType'>Type</label>
                 <select id='devType' class='select'></select>
                 <input type='text' id='devTypeNew' class='input combo-new' placeholder='Nom du nouveau type' style='display:none;'>
+            </div>
+            <div class='form-group'>
+                <label for='devConnector'>Connecteur <span class='label-hint'>— obligatoire, géré dans <a href='/admin/connectors'>Connecteurs</a></span></label>
+                <select id='devConnector' class='select'></select>
             </div>
         </div>
         <div class='form-group'>

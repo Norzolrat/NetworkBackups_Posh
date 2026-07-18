@@ -8,7 +8,8 @@ RUN apk add --no-cache \
     ncurses-terminfo-base \
     less \
     bash \
-    curl
+    curl \
+    argon2
 
 # Créer le dossier de configuration de PowerShell
 RUN mkdir -p /root/.config/powershell

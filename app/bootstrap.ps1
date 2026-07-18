@@ -1,12 +1,9 @@
-# 1. Génération automatique des credentials
-. /app/Credentials.ps1
-Generate-CredentialFileIfNeeded -Path "/app/credentials.xml"
-
-# 2. Exécution immédiate du backup (sortie concise en console, dupliquée dans backup.log)
+# 1. Exécution immédiate du backup (sortie concise en console, dupliquée dans backup.log)
+# L'authentification aux équipements passe par les connecteurs (/admin/connectors)
 Write-Host "⏳ Exécution du backup initial..."
 pwsh /app/Backup-Network.ps1 2>&1 | Tee-Object -FilePath /var/log/backup.log -Append
 
-# 3. Configuration du cron (backup toutes les heures, détail complet via -Verbose dans backup.log)
+# 2. Configuration du cron (backup toutes les heures, détail complet via -Verbose dans backup.log)
 Write-Host "📅 Configuration du cron..."
 $cronFile = "/etc/crontabs/root"
 $cronLine = "0 * * * * pwsh /app/Backup-Network.ps1 -Verbose >> /var/log/backup.log 2>&1"
@@ -19,11 +16,11 @@ if (-not (Get-Content $cronFile | Select-String "Backup-Network.ps1")) {
     Add-Content $cronFile $cronLine
 }
 
-# 4. Démarrer crond (important : en tâche de fond Linux, pas PowerShell)
+# 3. Démarrer crond (important : en tâche de fond Linux, pas PowerShell)
 Write-Host "🔁 Démarrage du service cron..."
 Start-Process crond -ArgumentList "-l 2"
 
-# 5. Lancer le script Web principal
+# 4. Lancer le script Web principal
 Write-Host "🚀 Démarrage de l'application principale..."
 pwsh /app/Web.ps1 -prefix $env:WEB_PREFIX -addr $env:WEB_ADDR -port $env:WEB_PORT
 

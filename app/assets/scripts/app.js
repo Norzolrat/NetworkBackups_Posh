@@ -162,6 +162,7 @@ function openConfig(evt, configName) {
 let deviceState = null;
 let deviceEditIndex = null;
 let devicesDirty = false;
+let connectorNames = [];
 
 function initDeviceManager() {
     const dataEl = document.getElementById("devicesData");
@@ -173,6 +174,16 @@ function initDeviceManager() {
         deviceState = { devices: [] };
     }
     if (!Array.isArray(deviceState.devices)) deviceState.devices = [];
+
+    const connectorsEl = document.getElementById("connectorsData");
+    if (connectorsEl) {
+        try {
+            connectorNames = JSON.parse(connectorsEl.textContent) || [];
+        } catch (e) {
+            connectorNames = [];
+        }
+        if (!Array.isArray(connectorNames)) connectorNames = [connectorNames];
+    }
 
     renderDevices();
 
@@ -271,6 +282,15 @@ function renderDevices() {
             type.textContent = device.Type;
             badges.appendChild(type);
         }
+        const connectorBadge = document.createElement("span");
+        if (device.Connector) {
+            connectorBadge.className = "badge badge-outline";
+            connectorBadge.textContent = "🔑 " + device.Connector;
+        } else {
+            connectorBadge.className = "badge badge-alert";
+            connectorBadge.textContent = "⚠ aucun connecteur";
+        }
+        badges.appendChild(connectorBadge);
 
         const cmds = document.createElement("div");
         cmds.className = "device-row-cmds";
@@ -302,8 +322,22 @@ function renderDevices() {
     const currentDevice = deviceEditIndex !== null ? deviceState.devices[deviceEditIndex] : null;
     buildCombo("devSite", "devSiteNew", collectDeviceValues("Site"), currentDevice ? currentDevice.Site : document.getElementById("devSite").value);
     buildCombo("devType", "devTypeNew", collectDeviceValues("Type"), currentDevice ? currentDevice.Type : document.getElementById("devType").value);
+    buildConnectorSelect(currentDevice ? currentDevice.Connector : document.getElementById("devConnector").value);
 
     document.getElementById("devicesPreview").textContent = JSON.stringify(deviceState, null, 2);
+}
+
+function buildConnectorSelect(current) {
+    const select = document.getElementById("devConnector");
+    if (!select) return;
+    select.innerHTML = "";
+    select.appendChild(new Option("— Sélectionner un connecteur —", ""));
+    connectorNames.forEach(n => select.appendChild(new Option(n, n)));
+    // Connecteur assigné mais disparu du store : on l'affiche quand même pour ne pas le perdre en silence
+    if (current && !connectorNames.includes(current)) {
+        select.appendChild(new Option(current + " (introuvable)", current));
+    }
+    select.value = current || "";
 }
 
 function showDeviceFormError(message) {
@@ -317,6 +351,7 @@ function submitDeviceForm() {
     const ip = document.getElementById("devIp").value.trim();
     const site = comboValue("devSite", "devSiteNew");
     const type = comboValue("devType", "devTypeNew");
+    const connector = document.getElementById("devConnector").value;
     const commands = document.getElementById("devCommands").value
         .split("\n")
         .map(line => line.trim())
@@ -327,6 +362,7 @@ function submitDeviceForm() {
     if (!ip) return showDeviceFormError("L'adresse IP est obligatoire.");
     if (!site) return showDeviceFormError("Choisissez un site ou saisissez-en un nouveau.");
     if (!type) return showDeviceFormError("Choisissez un type ou saisissez-en un nouveau.");
+    if (!connector) return showDeviceFormError("Choisissez un connecteur (créez-en un dans la page Connecteurs si besoin).");
     if (commands.length === 0) return showDeviceFormError("Au moins une commande est nécessaire.");
 
     const duplicate = deviceState.devices.findIndex((d, i) => d.Name === name && i !== deviceEditIndex);
@@ -341,6 +377,11 @@ function submitDeviceForm() {
         Site: site,
         Commands: commands
     });
+    if (connector) {
+        updated.Connector = connector;
+    } else {
+        delete updated.Connector;
+    }
 
     if (deviceEditIndex !== null) {
         deviceState.devices[deviceEditIndex] = updated;
@@ -377,6 +418,7 @@ function cancelDeviceEdit() {
     document.getElementById("devCommands").value = "";
     document.getElementById("devSiteNew").value = "";
     document.getElementById("devTypeNew").value = "";
+    document.getElementById("devConnector").value = "";
     document.getElementById("deviceFormTitle").textContent = "Ajouter un équipement";
     document.getElementById("deviceFormSubmit").textContent = "Ajouter";
     document.getElementById("deviceFormCancel").style.display = "none";
@@ -404,9 +446,45 @@ function saveDevices() {
     document.getElementById("devicesForm").submit();
 }
 
+/* ===================================================================
+   Connecteurs d'authentification (/admin/connectors)
+   Les secrets ne redescendent jamais du serveur : à l'édition, seuls
+   nom/type/identifiant sont pré-remplis, les champs secrets restent vides.
+   =================================================================== */
+function toggleConnectorFields() {
+    const typeSelect = document.getElementById("connType");
+    if (!typeSelect) return;
+    const isKey = typeSelect.value === "sshkey";
+    document.querySelectorAll(".conn-password").forEach(el => el.style.display = isKey ? "none" : "");
+    document.querySelectorAll(".conn-sshkey").forEach(el => el.style.display = isKey ? "" : "none");
+}
+
+function editConnector(btn) {
+    document.getElementById("connName").value = btn.dataset.name;
+    document.getElementById("connType").value = btn.dataset.type;
+    document.getElementById("connUsername").value = btn.dataset.username;
+    document.getElementById("connPassword").value = "";
+    document.getElementById("connKey").value = "";
+    document.getElementById("connPassphrase").value = "";
+    document.getElementById("connectorFormTitle").textContent = "Modifier " + btn.dataset.name;
+    document.getElementById("connectorFormSubmit").textContent = "Mettre à jour";
+    document.getElementById("connectorFormCancel").style.display = "";
+    toggleConnectorFields();
+    document.getElementById("connectorFormCard").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function resetConnectorForm() {
+    document.getElementById("connectorForm").reset();
+    document.getElementById("connectorFormTitle").textContent = "Ajouter un connecteur";
+    document.getElementById("connectorFormSubmit").textContent = "Ajouter";
+    document.getElementById("connectorFormCancel").style.display = "none";
+    toggleConnectorFields();
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     initPageState();
     initDeviceManager();
+    toggleConnectorFields();
     // Auto-rafraîchissement uniquement sur la page des configurations :
     // ailleurs (édition de devices.json notamment) un reload perdrait la saisie en cours.
     if (window.location.pathname === '/conf') {
