@@ -2,14 +2,14 @@
 . /app/Credentials.ps1
 Generate-CredentialFileIfNeeded -Path "/app/credentials.xml"
 
-# 2. Exécution immédiate du backup
+# 2. Exécution immédiate du backup (sortie concise en console, dupliquée dans backup.log)
 Write-Host "⏳ Exécution du backup initial..."
-pwsh /app/Backup-Network.ps1
+pwsh /app/Backup-Network.ps1 2>&1 | Tee-Object -FilePath /var/log/backup.log -Append
 
-# 3. Configuration du cron (backup toutes les heures)
+# 3. Configuration du cron (backup toutes les heures, détail complet via -Verbose dans backup.log)
 Write-Host "📅 Configuration du cron..."
 $cronFile = "/etc/crontabs/root"
-$cronLine = "0 * * * * pwsh /app/Backup-Network.ps1 >> /var/log/backup.log 2>&1"
+$cronLine = "0 * * * * pwsh /app/Backup-Network.ps1 -Verbose >> /var/log/backup.log 2>&1"
 
 if (-not (Test-Path $cronFile)) {
     New-Item -Path $cronFile -ItemType File -Force | Out-Null

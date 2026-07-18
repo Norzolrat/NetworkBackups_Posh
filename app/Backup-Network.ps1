@@ -1,10 +1,18 @@
+# Lancer avec -Verbose pour obtenir le déroulé détaillé (connexions, lectures SSH, tailles...)
+[CmdletBinding()]
+param()
+
 # Import des modules requis
 Import-Module Posh-SSH
 
 # Chemins des fichiers de configuration
 $configPath = "$PSScriptRoot\devices.json"
-$credentialPath = "$PSScriptRoot\credentials.xml" 
+$credentialPath = "$PSScriptRoot\credentials.xml"
 $backupPath = "$PSScriptRoot\NetworkBackups"
+
+# Marqueurs de pagination des équipements réseau, utilisés à la fois pour la
+# détection en direct (Read-CommandOutput) et pour le nettoyage a posteriori (Get-DeviceConfig)
+$script:MorePatterns = @('--More--', '--- More ---', '-- More --', 'Press any key to continue', '\[42D +\[42D', '\[K--More--\[K', '\[7m--More--\[27m')
 
 # Fonction pour créer le fichier de credentials de manière interactive
 function New-CredentialFile {
@@ -96,15 +104,19 @@ function Add-NewFiles {
     Write-Debug "Working on $Path"
     $newFiles = svn status | Where-Object { $_ -match '^\?' }
     if ($newFiles) {
-        $newFiles | ForEach-Object { 
+        $newFiles | ForEach-Object {
             $file = $_.Substring(8).Trim()
-            svn add $file
+            svn add $file --quiet
             Write-Debug "$file"
         }
     }
-    svn commit -m "Ajout automatique des configs"
-    svn update
-    Write-Host "Ajout automatique des configs"
+    if (svn status) {
+        svn commit -m "Ajout automatique des configs" --quiet
+        Write-Host "Changements committés dans le dépôt SVN" -ForegroundColor Green
+    } else {
+        Write-Host "Aucun changement de configuration à committer"
+    }
+    svn update --quiet
     Set-Location $startingLocation
 }
 
@@ -141,45 +153,45 @@ function Clean-TheConf {
 function Wait-ForPrompt {
     param (
         $sshStream,
-        [string]$promptPattern = '[\$#>]\s*$',
+        # ❱ et % couvrent les prompts zsh personnalisés (ex: serveurs Linux), en plus des prompts réseau classiques
+        [string]$promptPattern = '[#>$❱%]',
         [int]$maxWaitSeconds = 60
     )
-    
+
     $startTime = Get-Date
     $buffer = ""
-    
-    Write-Host "  [DEBUG] Attente du prompt..." -ForegroundColor Magenta
-    
+
+    Write-Verbose "Attente du prompt..."
+
     while (((Get-Date) - $startTime).TotalSeconds -lt $maxWaitSeconds) {
         Start-Sleep -Milliseconds 500
         $newData = $sshStream.Read()
-        
+
         if ($newData) {
             $buffer += $newData
-            Write-Host "  [DEBUG] Reçu: '$newData'" -ForegroundColor Magenta
-            
+            Write-Verbose "Reçu: '$newData'"
+
             # Nettoyer les séquences ANSI du buffer pour la détection
             $cleanBuffer = $buffer -replace '\x1B\[[0-9;]*[a-zA-Z]', ''
             $cleanBuffer = $cleanBuffer -replace '\x1B\[[0-9;]*R', ''  # Pour \x1B[30;120R
             $cleanBuffer = $cleanBuffer -replace '\[[0-9;]*[a-zA-Z]', ''
             $cleanBuffer = $cleanBuffer -replace '\[[0-9;]*R', ''
             $cleanBuffer = $cleanBuffer.Trim()
-            
+
             # Supprimer les lignes vides
             $cleanBuffer = ($cleanBuffer -split "`n" | Where-Object { $_.Trim() }) -join "`n"
-            
-            Write-Host "  [DEBUG] Buffer nettoyé: '$cleanBuffer'" -ForegroundColor Cyan
-            
+
+            Write-Verbose "Buffer nettoyé: '$cleanBuffer'"
+
            # Vérifier si le buffer contient un caractère de prompt
-            if ($cleanBuffer -match '[#>$]') {
-                Write-Host "  [DEBUG] Prompt detecte - caractere trouve" -ForegroundColor Green
+            if ($cleanBuffer -match $promptPattern) {
+                Write-Verbose "Prompt détecté - caractère trouvé"
                 return $true
             }
         }
     }
-    
-    Write-Host "  [DEBUG] Buffer final: '$buffer'" -ForegroundColor Red
-    Write-Host "  [DEBUG] Buffer final nettoyé: '$($buffer -replace '\x1B\[[0-9;]*[a-zA-Z]', '')'" -ForegroundColor Red
+
+    Write-Verbose "Buffer final: '$buffer'"
     Write-Warning "Timeout en attendant le prompt après $maxWaitSeconds secondes"
     return $false
 }
@@ -190,8 +202,8 @@ function Read-CommandOutput {
         $sshStream,
         [string]$command,
         [int]$maxWaitSeconds = 300,
-        [string]$endPattern = '[\$#>]\s*$',
-        [string[]]$morePatterns = @('--More--', '--- More ---', '-- More --', 'Press any key to continue', '\[42D +\[42D', '\[K--More--\[K', '\[7m--More--\[27m')
+        [string]$endPattern = '[#>$❱%]\s*$',
+        [string[]]$morePatterns = $script:MorePatterns
     )
     
     $output = ""
@@ -201,27 +213,27 @@ function Read-CommandOutput {
     $iterationCount = 0
     $paginationCount = 0
     
-    Write-Host "    Lecture de la sortie pour: $command" -ForegroundColor Cyan
-    
+    Write-Verbose "Lecture de la sortie pour: $command"
+
     while (((Get-Date) - $startTime).TotalSeconds -lt $maxWaitSeconds) {
         $newData = $sshStream.Read()
-        
+
         if ($newData) {
             $output += $newData
             $lastDataTime = Get-Date
             $iterationCount++
-            
-            # Afficher un point de progression toutes les 100 itérations
+
+            # Signaler la progression toutes les 100 itérations
             if ($iterationCount % 100 -eq 0) {
-                Write-Host "." -NoNewline -ForegroundColor Cyan
+                Write-Verbose "Lecture en cours ($iterationCount lectures, $($output.Length) caractères)"
             }
-            
+
             # Vérifier s'il y a une pagination en cours
             $foundMorePattern = $false
             foreach ($morePattern in $morePatterns) {
                 if ($output -match $morePattern) {
                     $paginationCount++
-                    Write-Host "`n    Pagination détectée #$paginationCount ($morePattern), envoi d'espace..." -ForegroundColor Yellow
+                    Write-Verbose "Pagination détectée #$paginationCount ($morePattern), envoi d'espace..."
                     $sshStream.WriteLine(" ")
                     Start-Sleep -Milliseconds 1000
                     $foundMorePattern = $true
@@ -237,12 +249,19 @@ function Read-CommandOutput {
                 continue
             }
             
-            # Vérifier si on a atteint la fin (prompt) seulement si pas de pagination
-            if ($output -match $endPattern) {
-                # Vérifier que ce n'est pas un faux positif au milieu de la sortie
-                $lines = $output -split "`n"
-                $lastLines = $lines[-10..-1] | Where-Object { $_.Trim() }
-                
+            # Vérifier si on a atteint la fin (prompt) seulement si pas de pagination.
+            # La détection se fait sur la fin du buffer débarrassée des séquences ANSI/OSC :
+            # certains shells redessinent leur prompt en couleurs, ce qui masque le motif de fin.
+            $tail = if ($output.Length -gt 2000) { $output.Substring($output.Length - 2000) } else { $output }
+            $cleanTail = $tail -replace '\x1B\][^\x07\x1B]*(\x07|\x1B\\)', ''
+            $cleanTail = $cleanTail -replace '\x1B\[[\x30-\x3F]*[\x20-\x2F]*[\x40-\x7E]', ''
+            $cleanTail = $cleanTail -replace '\x1B[=>]', ''
+
+            if ($cleanTail -match $endPattern) {
+                # Vérifier que ce n'est pas un faux positif au milieu de la sortie.
+                # Découpage sur \r ET \n : certains shells ne redessinent leur prompt qu'à coups de \r.
+                $lastLines = ($cleanTail -split '[\r\n]+')[-10..-1] | Where-Object { $_.Trim() }
+
                 $foundPromptAtEnd = $false
                 foreach ($line in $lastLines) {
                     if ($line -match $endPattern -and $line.Trim().Length -lt 100) {
@@ -250,16 +269,16 @@ function Read-CommandOutput {
                         break
                     }
                 }
-                
+
                 if ($foundPromptAtEnd) {
-                    Write-Host "`n    Fin de commande détectée (après $paginationCount paginations)" -ForegroundColor Green
+                    Write-Verbose "Fin de commande détectée (après $paginationCount paginations)"
                     break
                 }
             }
         } else {
             # Pas de nouvelles données, vérifier le timeout
             if (((Get-Date) - $lastDataTime).TotalSeconds -gt $stableDataTimeout) {
-                Write-Host "`n    Timeout de stabilité atteint après $paginationCount paginations" -ForegroundColor Yellow
+                Write-Verbose "Timeout de stabilité atteint après $paginationCount paginations"
                 break
             }
         }
@@ -271,12 +290,12 @@ function Read-CommandOutput {
         Write-Warning "`nTimeout global atteint pour la commande: $command (après $paginationCount paginations)"
     }
     
-    Write-Host "`n    Taille de sortie récupérée: $($output.Length) caractères avec $paginationCount paginations" -ForegroundColor Cyan
-    
+    Write-Verbose "Taille de sortie récupérée: $($output.Length) caractères avec $paginationCount paginations"
+
     # Compter approximativement le nombre d'interfaces pour validation
     $interfaceCount = ($output | Select-String -Pattern "interface.*Ethernet" -AllMatches).Matches.Count
     if ($interfaceCount -gt 0) {
-        Write-Host "    Nombre d'interfaces détectées: $interfaceCount" -ForegroundColor Cyan
+        Write-Verbose "Nombre d'interfaces détectées: $interfaceCount"
     }
     
     return $output
@@ -292,21 +311,21 @@ function Get-DeviceConfig {
     $output = @()
     
     # Attendre que la connexion soit stable
-    Write-Host "  Attente de stabilisation de la connexion..." -ForegroundColor Cyan
+    Write-Verbose "Attente de stabilisation de la connexion..."
     if (-not (Wait-ForPrompt -sshStream $sshStream -maxWaitSeconds 90)) {
         throw "Impossible d'établir une connexion stable"
     }
 
     foreach ($command in $device.Commands) {
         try {
-            Write-Host "  Exécution de la commande: $command" -ForegroundColor Cyan
-            
+            Write-Verbose "Exécution de la commande: $command"
+
             # Traiter les commandes multi-lignes (séparées par \n)
             $commandParts = $command -split "`n"
-            
+
             foreach ($part in $commandParts) {
                 if ($part.Trim()) {
-                    Write-Host "    Envoi de: $($part.Trim())" -ForegroundColor Gray
+                    Write-Verbose "Envoi de: $($part.Trim())"
                     $sshStream.WriteLine($part.Trim())
                     Start-Sleep -Seconds 2
                 }
@@ -322,27 +341,16 @@ function Get-DeviceConfig {
                 # Nettoyer les séquences ANSI et autres caractères de contrôle
                 $cleanResult = $result
                 
-                # Liste complète des patterns à nettoyer (y compris les patterns de pagination)
+                # Liste des patterns à nettoyer (y compris les patterns de pagination, partagés via $script:MorePatterns)
                 $patternsToClean = @(
-                    '\x1B\[[0-9;]*[a-zA-Z]',      # Séquences ANSI standards
-                    '\x1B\][0-9;]*\x07',          # Séquences OSC
-                    '\x1B\[[\d;]*[A-Za-z]',       # Autres séquences de contrôle
-                    '\[\d+;\d+[A-Za-z]',          # Format comme [24;1H
-                    '\[\?25[hl]',                 # [?25h et [?25l
-                    '\[\?[0-9]+[hl]',             # [?6l, [?7h, etc.
-                    '\[K',                        # Séquence d'effacement de ligne
-                    '\[\?[0-9]+[a-zA-Z]',         # Toute séquence commençant par [? et finissant par une lettre
-                    '\[\\\d*[a-zA-Z]',            # Autres séquences de contrôle
-                    '\[[0-9;]*[a-zA-Z]',          # Séquences numériques génériques
-                    '\x1B\[[\x30-\x3F]*[\x20-\x2F]*[\x40-\x7E]', # Séquences d'échappement complexes
-                    '--More--',                   # Patterns de pagination
-                    '--- More ---',
-                    '-- More --',
-                    'Press any key to continue',
-                    '\[42D +\[42D',
-                    '\[K--More--\[K',
-                    '\[7m--More--\[27m',
-                    '[^\x20-\x7E\n\r\t]'         # Tous les caractères non-imprimables sauf les sauts de ligne, retours chariot et tabulations
+                    '\x1B\[[\x30-\x3F]*[\x20-\x2F]*[\x40-\x7E]', # Séquences d'échappement ANSI/CSI complètes (ESC [ ... lettre finale)
+                    '\x1B\][^\x07\x1B]*(\x07|\x1B\\)',           # Séquences OSC complètes, titre inclus (ESC ] ... BEL ou ST)
+                    '\[\d+;\d+[A-Za-z]',                         # Positionnement dont l'ESC initial a été perdu, ex: [24;1H
+                    '\[\?[0-9]+[a-zA-Z]',                        # Toggle dont l'ESC initial a été perdu, ex: [?25h, [?6l
+                    '\[\\\d*[a-zA-Z]',                           # Autres séquences de contrôle sans ESC
+                    '\[[0-9;]*[a-zA-Z]'                          # Séquences numériques génériques sans ESC, ex: [K
+                ) + $script:MorePatterns + @(
+                    '[^\x20-\x7E\n\r\t]'                         # Caractères non-imprimables restants
                 )
 
                 # Appliquer chaque pattern de nettoyage
@@ -352,16 +360,15 @@ function Get-DeviceConfig {
 
                 # Normaliser les sauts de ligne
                 $cleanResult = $cleanResult -replace '(\r\n|\r|\n)', "`n"
-                
-                # Filtrer les lignes vides en début et fin et les lignes qui ne contiennent que des espaces
-                $cleanResult = ($cleanResult -split "`n" | Where-Object { $_.Trim() }) -join "`n"
 
-                # Filtrer les lignes vides, les lignes avec uniquement des espaces
-                # ET les lignes contenant "Last login" ou un format de date typique
+                # Filtrer les lignes vides/espaces uniquement, ainsi que les lignes
+                # de "Last login", de date typique (ex: Mon May 13 10:32:45) et de
+                # prompt horodaté (ex: [22:42:18] [~]) qui varient à chaque run
                 $cleanResult = ($cleanResult -split "`n" | Where-Object {
                     $_.Trim() -and
                     ($_ -notmatch 'Last login') -and
-                    ($_ -notmatch '^\s*\w{3}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2}') # ex: Mon May 13 10:32:45
+                    ($_ -notmatch '^\s*\w{3}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2}') -and
+                    ($_ -notmatch '^\s*\[\d{2}:\d{2}:\d{2}\]')
                 }) -join "`n"
 
                 $cleanResult = Clean-TheConf -command $command -conf $cleanResult
@@ -373,17 +380,17 @@ function Get-DeviceConfig {
                     # Validation - compter les interfaces pour diagnostic
                     $interfaceCount = ($cleanResult | Select-String -Pattern "interface.*Ethernet" -AllMatches).Matches.Count
                     if ($interfaceCount -gt 0) {
-                        Write-Host "  Validation: $interfaceCount interfaces trouvées" -ForegroundColor Cyan
-                        
+                        Write-Verbose "Validation: $interfaceCount interfaces trouvées"
+
                         # Pour un cluster de 4 switches avec 48 ports chacun
                         if ($device.Type -eq "comware" -and $interfaceCount -gt 100) {
-                            Write-Host "  ✅ Configuration semble complète" -ForegroundColor Green
+                            Write-Verbose "Configuration semble complète"
                         } elseif ($device.Type -eq "comware" -and $interfaceCount -lt 50) {
                             Write-Warning "  ⚠️  Nombre d'interfaces suspicieusement bas pour un cluster."
                         }
                     }
-                    
-                    Write-Host "  Commande exécutée avec succès. Taille: $($cleanResult.Length) caractères" -ForegroundColor Green
+
+                    Write-Verbose "Commande exécutée avec succès. Taille: $($cleanResult.Length) caractères"
                 } else {
                     Write-Warning "Contenu vide après nettoyage pour la commande '$command'"
                 }
@@ -408,6 +415,9 @@ function Backup-NetworkDevices {
         $devices = Import-DeviceConfig
         $credential = Import-DeviceCredentials
 
+        $successCount = 0
+        $failedDevices = @()
+
         foreach ($device in $devices) {
             $sshSession = $null
             $sshStream = $null
@@ -422,26 +432,27 @@ function Backup-NetworkDevices {
                 }
 
                 # Établir la connexion SSH avec timeout étendu
-                Write-Host "  Établissement de la connexion SSH..." -ForegroundColor Cyan
-                $sshSession = New-SSHSession -ComputerName $device.IP -Credential $credential -AcceptKey -Force -ConnectionTimeout 90
-                
+                # (le warning "Host key is not being verified" est masqué : conséquence assumée de -AcceptKey -Force)
+                Write-Verbose "Établissement de la connexion SSH..."
+                $sshSession = New-SSHSession -ComputerName $device.IP -Credential $credential -AcceptKey -Force -ConnectionTimeout 90 -WarningAction SilentlyContinue
+
                 if ($sshSession) {
-                    Write-Host "  Connexion SSH établie (SessionId: $($sshSession.SessionId))" -ForegroundColor Green
-                    
+                    Write-Verbose "Connexion SSH établie (SessionId: $($sshSession.SessionId))"
+
                     # Créer un nouveau stream SSH avec buffer plus grand
                     $sshStream = New-SSHShellStream -Index ($sshSession.SessionId) -Columns 200 -Rows 50 -TerminalName "xterm"
-                    
+
                     if ($sshStream) {
-                        Write-Host "  Stream SSH créé" -ForegroundColor Green
-                        
+                        Write-Verbose "Stream SSH créé"
+
                         # Récupérer la configuration avec gestion améliorée
                         $config = Get-DeviceConfig -device $device -sshStream $sshStream
 
                         if ($config -and $config.Count -gt 0) {
                             # Créer le fichier de backup
                             $fileName = "$($device.Name)"
-                            $configPath = Join-Path $backupPath "configs"
-                            $filePath = Join-Path $configPath $fileName
+                            $configsFolder = Join-Path $backupPath "configs"
+                            $filePath = Join-Path $configsFolder $fileName
 
                             # Joindre toutes les parties de la config
                             $finalConfig = $config -join ""
@@ -450,6 +461,7 @@ function Backup-NetworkDevices {
                             if ($finalConfig.Trim().Length -gt 0) {
                                 $finalConfig | Out-File -FilePath $filePath -Encoding UTF8
                                 Write-Host "  Backup réussi pour $($device.Name) - Taille: $($finalConfig.Length) caractères" -ForegroundColor Green
+                                $successCount++
                             } else {
                                 throw "Configuration vide après traitement"
                             }
@@ -464,7 +476,8 @@ function Backup-NetworkDevices {
                 }
             }
             catch {
-                Write-Error "Erreur lors du backup de $($device.Name): $_"
+                Write-Host "  ❌ Échec du backup de $($device.Name): $_" -ForegroundColor Red
+                $failedDevices += $device.Name
             }
             finally {
                 # Nettoyage des ressources dans l'ordre inverse
@@ -481,7 +494,7 @@ function Backup-NetworkDevices {
                 
                 if ($sshSession) {
                     try {
-                        Remove-SSHSession -SessionId $sshSession.SessionId
+                        Remove-SSHSession -SessionId $sshSession.SessionId | Out-Null
                         Write-Debug "Session SSH fermée pour $($device.Name)"
                     }
                     catch {
@@ -493,9 +506,13 @@ function Backup-NetworkDevices {
         
         # Ajouter les nouveaux fichiers au repository SVN
         Add-NewFiles -Path (Join-Path $backupPath "configs")
+
+        $summaryColor = if ($failedDevices) { 'Yellow' } else { 'Green' }
+        $failedSuffix = if ($failedDevices) { " ($($failedDevices -join ', '))" } else { "" }
+        Write-Host "`nBackup terminé : $successCount réussi(s), $($failedDevices.Count) échec(s)$failedSuffix" -ForegroundColor $summaryColor
     }
     catch {
-        Write-Error "Erreur lors de l'importation des configurations: $_"
+        Write-Host "❌ Erreur lors de l'importation des configurations: $_" -ForegroundColor Red
     }
 }
 
