@@ -1,62 +1,78 @@
-function showRevision(button) {
-    let rev_sel = button.closest('.revision-section');
-    let parentid = rev_sel.closest('.tabcontent').id;
-    let rev = rev_sel.querySelector('#revisionSelect').value;
-    if (!rev) return;
-    localStorage.setItem("storage_" + parentid, rev);
-    const configContent = document.getElementById("cnt_" + parentid).querySelector('pre');
-    configContent.innerHTML = "Chargement...";
-    let url = window.location.href;
-    if(url.includes("?")){
-        if(url.includes(parentid)) {
-            window.location.href = url.replace(new RegExp(parentid + "=\\d+(&|$)"), parentid + "=" + rev + "$1");
-        } else {
-            window.location.href = url + "&"+parentid+"="+rev;
-        }
-    } else {
-        window.location.href = url + "?"+parentid+"="+rev;
+// Changement de révision sans rechargement : le contenu est récupéré via /api/conf
+function showRevision(select) {
+    const section = select.closest('.revision-section');
+    const device = section.closest('.tabcontent').id;
+    const rev = select.value;
+    localStorage.setItem("storage_" + device, rev || "latest");
+
+    const pre = document.getElementById("cnt_" + device).querySelector('pre');
+    const status = section.querySelector('.rev-status');
+    if (status) {
+        status.style.display = "";
+        status.textContent = "Chargement…";
     }
-    //location.reload();
+
+    fetch("/api/conf?device=" + encodeURIComponent(device) + (rev ? "&rev=" + encodeURIComponent(rev) : ""))
+        .then(response => {
+            if (!response.ok) throw new Error("HTTP " + response.status);
+            return response.text();
+        })
+        .then(text => {
+            pre.textContent = text;
+            pre.dataset.rev = rev || "latest";
+            if (status) status.style.display = "none";
+        })
+        .catch(err => {
+            if (status) status.textContent = "Erreur de chargement (" + err.message + ")";
+        });
 }
 
 function diffRevision(button) {
-    let rev_sel = button.closest('.revision-section');
-    let parentid = rev_sel.closest('.tabcontent').id;
-    let rev = rev_sel.querySelector('#revisionSelect').value;
-    if (!rev) return;
+    const tab = button.closest('.tabcontent');
+    const select = tab.querySelector('#revisionSelect');
+    const rev = select ? select.value : "";
+    if (!rev) {
+        alert("Sélectionnez d'abord une révision à comparer avec la version actuelle.");
+        return;
+    }
     saveConfig();
-    window.location.href = "/diff?device="+parentid+"&rev="+rev;
+    window.location.href = "/diff?device=" + encodeURIComponent(tab.id) + "&rev=" + encodeURIComponent(rev);
 }
 
+// Les filtres ne touchent qu'à la liste des onglets : la config affichée reste
+// celle sélectionnée, et si elle sort du filtre on invite à en choisir une autre.
 function filterConfigs() {
-    let value = document.getElementById("filterSelect").value;
-    let allTabs = document.querySelectorAll(".tabcontent");
-    let visibleIds = [];
+    const siteFilter = document.getElementById("filterSite").value;
+    const typeFilter = document.getElementById("filterType").value;
 
-    allTabs.forEach(tab => {
-        if (value === "all" || tab.classList.contains(value)) {
-            tab.style.display = "block";
-            visibleIds.push(tab.id);
-        } else {
-            tab.style.display = "none";
-        }
+    const visibleIds = [];
+    document.querySelectorAll(".tablinks").forEach(button => {
+        const target = button.dataset.target || button.textContent.trim();
+        const tab = document.getElementById(target);
+        const matches = tab &&
+            (siteFilter === "all" || tab.classList.contains(siteFilter)) &&
+            (typeFilter === "all" || tab.classList.contains(typeFilter));
+        button.style.display = matches ? "" : "none";
+        if (matches) visibleIds.push(target);
     });
 
-    let allButtons = document.querySelectorAll(".tablinks");
-    allButtons.forEach(button => {
-        let configName = button.dataset.target || button.textContent.trim();
-        if (visibleIds.includes(configName)) {
-            button.style.display = "inline-block";
-        } else {
-            button.style.display = "none";
-        }
-    });
+    const activeButton = document.querySelector(".tablinks.active");
+    const activeId = activeButton ? (activeButton.dataset.target || activeButton.textContent.trim()) : null;
 
-    let activeTab = document.querySelector(".tablinks.active");
-    if (!activeTab || activeTab.style.display === "none") {
-        let firstVisible = document.querySelector(".tablinks:not([style*='display: none'])");
-        if (firstVisible) firstVisible.click();
+    if (activeId && visibleIds.includes(activeId)) {
+        setNoSelection(false);
+        return;
     }
+
+    // La config active ne correspond plus au filtre : on la masque sans en ouvrir une autre
+    document.querySelectorAll(".tabcontent").forEach(tab => tab.style.display = "none");
+    if (activeButton) activeButton.className = activeButton.className.replace(" active", "");
+    setNoSelection(true);
+}
+
+function setNoSelection(show) {
+    const placeholder = document.getElementById("noSelection");
+    if (placeholder) placeholder.style.display = show ? "" : "none";
 }
 
 function initPageState() {
@@ -85,7 +101,7 @@ function initPageState() {
         const configName = tab.id;
         const savedRevision = localStorage.getItem("storage_" + configName);
 
-        if (savedRevision) {
+        if (savedRevision && savedRevision !== "latest") {
             const revisionSelect = tab.querySelector('#revisionSelect');
             if (revisionSelect) {
                 revisionSelect.value = savedRevision;
@@ -107,16 +123,10 @@ function getActiveTab() {
 }
 
 function saveRevision() {
-
-    let tabContents = document.querySelectorAll(".revision-controls");
-    tabContents.forEach(tab => {
-        const sectionName = tab.parentElement.parentElement.id;
-        const revision = tab.querySelector("#revisionSelect").value;
-
-        if (revision) {
-            localStorage.setItem("storage_" + sectionName, revision);
-        }else{
-            localStorage.setItem("storage_" + sectionName, "latest");
+    document.querySelectorAll(".tabcontent").forEach(tab => {
+        const select = tab.querySelector("#revisionSelect");
+        if (select) {
+            localStorage.setItem("storage_" + tab.id, select.value || "latest");
         }
     });
 }
@@ -141,14 +151,21 @@ function openConfig(evt, configName) {
     if (selectedTab) {
         selectedTab.style.display = "block";
         evt.currentTarget.className += " active";
+        setNoSelection(false);
 
         localStorage.setItem("activeTab", configName);
 
-        const savedRevision = localStorage.getItem("storage_" + configName);
-        if (savedRevision) {
-            const revisionSelect = selectedTab.querySelector('#revisionSelect');
-            if (revisionSelect) {
+        const revisionSelect = selectedTab.querySelector('#revisionSelect');
+        if (revisionSelect) {
+            const savedRevision = localStorage.getItem("storage_" + configName);
+            if (savedRevision && savedRevision !== "latest") {
                 revisionSelect.value = savedRevision;
+            }
+            // Si le contenu affiché ne correspond pas à la révision sélectionnée, on le charge
+            const pre = selectedTab.querySelector('.content pre');
+            const wanted = revisionSelect.value || "latest";
+            if (pre && (pre.dataset.rev || "latest") !== wanted) {
+                showRevision(revisionSelect);
             }
         }
     }
@@ -473,6 +490,23 @@ function editConnector(btn) {
     document.getElementById("connectorFormCard").scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
+/* ===== Planification des sauvegardes (/admin/settings) ===== */
+function applyCronPreset() {
+    const preset = document.getElementById("cronPreset");
+    if (preset.value) {
+        document.getElementById("cronExpression").value = preset.value;
+    }
+}
+
+function toggleCronFields() {
+    const enabled = document.getElementById("cronEnabled");
+    if (!enabled) return;
+    document.querySelectorAll(".cron-fields").forEach(el => {
+        el.style.opacity = enabled.checked ? "" : "0.45";
+        el.querySelectorAll("select, input").forEach(field => field.disabled = !enabled.checked);
+    });
+}
+
 function resetConnectorForm() {
     document.getElementById("connectorForm").reset();
     document.getElementById("connectorFormTitle").textContent = "Ajouter un connecteur";
@@ -485,6 +519,7 @@ document.addEventListener('DOMContentLoaded', function() {
     initPageState();
     initDeviceManager();
     toggleConnectorFields();
+    toggleCronFields();
     // Auto-rafraîchissement uniquement sur la page des configurations :
     // ailleurs (édition de devices.json notamment) un reload perdrait la saisie en cours.
     if (window.location.pathname === '/conf') {

@@ -68,6 +68,53 @@ function Set-AppSetting {
     Save-AppSettings -settings $settings
 }
 
+# Réécrit la ligne de sauvegarde planifiée dans le crontab selon les settings
+# (BACKUP_CRON / BACKUP_CRON_ENABLED). Les autres lignes du crontab sont préservées.
+function Update-BackupCrontab {
+    param([switch]$RestartCrond)
+
+    $cronFile = "/etc/crontabs/root"
+    $expression = Get-AppSetting 'BACKUP_CRON' '0 * * * *'
+    $enabled = (Get-AppSetting 'BACKUP_CRON_ENABLED' 'true') -ne 'false'
+
+    $lines = @()
+    if (Test-Path $cronFile) {
+        $lines = @(Get-Content $cronFile | Where-Object { $_ -notmatch 'Backup-Network\.ps1' -and $_.Trim() })
+    }
+    if ($enabled) {
+        $lines += "$expression pwsh /app/Backup-Network.ps1 -Verbose >> /var/log/backup.log 2>&1"
+    }
+    Set-Content -Path $cronFile -Value ($lines -join "`n")
+
+    # busybox crond ne relit pas de façon fiable un fichier modifié en place : on le redémarre
+    if ($RestartCrond) {
+        Start-Process -FilePath "/bin/sh" -ArgumentList '-c "pkill crond; sleep 1; crond -l 2"' | Out-Null
+    }
+}
+
+function Update-BackupCronSettings {
+    param([hashtable]$postParams)
+
+    $enabled = $postParams['cronEnabled'] -eq 'on'
+    $expression = ($postParams['cronExpression'] ?? '').Trim()
+
+    if ($enabled) {
+        $fields = $expression -split '\s+'
+        if ($fields.Count -ne 5 -or ($fields | Where-Object { $_ -notmatch '^[\d*,/-]+$' })) {
+            return "<div class='notice notice-error'>Expression cron invalide : 5 champs attendus (minute heure jour mois jour-semaine), caractères autorisés : chiffres, *, virgule, /, tiret.</div>"
+        }
+        Set-AppSetting -name 'BACKUP_CRON' -value $expression
+        Set-AppSetting -name 'BACKUP_CRON_ENABLED' -value 'true'
+    } else {
+        Set-AppSetting -name 'BACKUP_CRON_ENABLED' -value 'false'
+    }
+
+    Update-BackupCrontab -RestartCrond
+
+    $state = if ($enabled) { "planifiées (« $expression »)" } else { "désactivées" }
+    return "<div class='notice notice-success'>Sauvegardes automatiques $state.</div>"
+}
+
 function Update-AdminPassword {
     param(
         [hashtable]$postParams,
@@ -153,11 +200,28 @@ function Handle-AdminSettings {
         $message = switch ($postParams['action']) {
             'password' { Update-AdminPassword -postParams $postParams -sessionToken $sessionToken }
             'vars'     { Update-AppVariables -postParams $postParams }
+            'cron'     { Update-BackupCronSettings -postParams $postParams }
             default    { "<div class='notice notice-error'>Action inconnue</div>" }
         }
     }
 
     $overrides = Import-AppSettings
+
+    # État de la planification des sauvegardes
+    $cronExpression = Get-AppSetting 'BACKUP_CRON' '0 * * * *'
+    $cronEnabled = (Get-AppSetting 'BACKUP_CRON_ENABLED' 'true') -ne 'false'
+    $cronChecked = if ($cronEnabled) { "checked" } else { "" }
+    $encCronExpression = [System.Web.HttpUtility]::HtmlEncode($cronExpression)
+
+    $cronFile = "/etc/crontabs/root"
+    $currentCronLine = if (Test-Path $cronFile) {
+        Get-Content $cronFile | Where-Object { $_ -match 'Backup-Network\.ps1' } | Select-Object -First 1
+    } else { $null }
+    $cronStatus = if ($currentCronLine) {
+        "Ligne cron active : <code>$([System.Web.HttpUtility]::HtmlEncode($currentCronLine))</code>"
+    } else {
+        "Aucune sauvegarde planifiée actuellement."
+    }
 
     $varRows = foreach ($setting in $script:EditableSettings) {
         $override = [string]$overrides[$setting.Name]
@@ -204,6 +268,38 @@ $message
             </div>
         </div>
         <button type='submit' class='btn btn-primary'>Mettre à jour le mot de passe</button>
+    </form>
+</div>
+
+<div class='card settings-card' style='margin-top:18px;'>
+    <h2>Sauvegardes planifiées</h2>
+    <p class='hint' style='margin:6px 0 16px;'>$cronStatus</p>
+    <form method='POST' action='/admin/settings'>
+        <input type='hidden' name='csrf' value='$($session.Csrf)'>
+        <input type='hidden' name='action' value='cron'>
+        <label class='checkbox-line'>
+            <input type='checkbox' name='cronEnabled' id='cronEnabled' $cronChecked onchange='toggleCronFields()'>
+            Activer les sauvegardes automatiques
+        </label>
+        <div class='form-grid cron-fields'>
+            <div class='form-group'>
+                <label for='cronPreset'>Fréquence prédéfinie</label>
+                <select id='cronPreset' class='select' onchange='applyCronPreset()'>
+                    <option value=''>— Choisir —</option>
+                    <option value='0 * * * *'>Toutes les heures</option>
+                    <option value='0 */2 * * *'>Toutes les 2 heures</option>
+                    <option value='0 */6 * * *'>Toutes les 6 heures</option>
+                    <option value='0 */12 * * *'>Toutes les 12 heures</option>
+                    <option value='0 2 * * *'>Tous les jours à 02h00</option>
+                    <option value='0 2 * * 1'>Chaque lundi à 02h00</option>
+                </select>
+            </div>
+            <div class='form-group'>
+                <label for='cronExpression'>Expression cron <span class='label-hint'>— minute heure jour mois jour-semaine</span></label>
+                <input type='text' id='cronExpression' name='cronExpression' class='input' value='$encCronExpression' placeholder='0 * * * *'>
+            </div>
+        </div>
+        <button type='submit' class='btn btn-primary'>Enregistrer la planification</button>
     </form>
 </div>
 

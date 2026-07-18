@@ -191,7 +191,7 @@ function Handle-Login {
             $cookie = [System.Net.Cookie]::new('session', $session.Token, '/')
             $cookie.HttpOnly = $true
             $cookie.Secure = ((Get-AppSetting 'WEB_PREFIX') -eq 'https')
-            return @{ Redirect = '/admin'; Cookie = $cookie }
+            return @{ Redirect = '/conf'; Cookie = $cookie }
         }
 
         Register-LoginFailure -clientIp $clientIp

@@ -21,7 +21,6 @@ function Get-PageTitle {
     switch ($path) {
         "/conf"          { "Configurations" }
         "/diff"          { "Différences" }
-        "/admin"         { "Administration" }
         "/admin/devices" { "Équipements" }
         "/admin/connectors" { "Connecteurs" }
         "/admin/logs"    { "Journaux de backup" }
@@ -66,7 +65,6 @@ function Get-Html{
     if ($authenticated) {
         $icons = @{
             Configs  = "<svg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='2' y='2' width='20' height='8' rx='2' ry='2'></rect><rect x='2' y='14' width='20' height='8' rx='2' ry='2'></rect><line x1='6' y1='6' x2='6.01' y2='6'></line><line x1='6' y1='18' x2='6.01' y2='18'></line></svg>"
-            Overview = "<svg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='3' width='7' height='7'></rect><rect x='14' y='3' width='7' height='7'></rect><rect x='14' y='14' width='7' height='7'></rect><rect x='3' y='14' width='7' height='7'></rect></svg>"
             Devices  = "<svg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><line x1='8' y1='6' x2='21' y2='6'></line><line x1='8' y1='12' x2='21' y2='12'></line><line x1='8' y1='18' x2='21' y2='18'></line><line x1='3' y1='6' x2='3.01' y2='6'></line><line x1='3' y1='12' x2='3.01' y2='12'></line><line x1='3' y1='18' x2='3.01' y2='18'></line></svg>"
             Logs     = "<svg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'></path><polyline points='14 2 14 8 20 8'></polyline><line x1='16' y1='13' x2='8' y2='13'></line><line x1='16' y1='17' x2='8' y2='17'></line></svg>"
             Key      = "<svg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4'></path></svg>"
@@ -84,7 +82,6 @@ function Get-Html{
             <p class="nav-label">Sauvegardes</p>
             $(Get-NavItem -href '/conf' -label 'Configurations' -icon $icons.Configs -currentPath $path)
             <p class="nav-label">Administration</p>
-            $(Get-NavItem -href '/admin' -label "Vue d'ensemble" -icon $icons.Overview -currentPath $path)
             $(Get-NavItem -href '/admin/devices' -label 'Équipements' -icon $icons.Devices -currentPath $path)
             $(Get-NavItem -href '/admin/connectors' -label 'Connecteurs' -icon $icons.Key -currentPath $path)
             $(Get-NavItem -href '/admin/logs' -label 'Journaux' -icon $icons.Logs -currentPath $path)
@@ -97,7 +94,6 @@ function Get-Html{
     <div class="main">
         <header class="topbar">
             <h1>$pageTitle</h1>
-            <a href="/logout" class="btn btn-secondary btn-sm">Déconnexion</a>
         </header>
         <main class="content">
             $body
@@ -185,8 +181,9 @@ function Start-ConfigServer {
                     "/login"         { Handle-Login -method $method -postParams $postParams -clientIp $clientIp }
                     "/logout"        { Handle-Logout -token $sessionCookie.Value }
                     "/conf"          { Handle-Conf -parameters $parameters -session $session }
+                    "/api/conf"      { Handle-ConfContent -parameters $parameters }
                     "/diff"          { Handle-Diff -parameters $parameters }
-                    "/admin"         { Handle-AdminDashboard -session $session }
+                    "/admin"         { @{ Redirect = '/conf' } }   # la vue d'ensemble a été retirée
                     "/admin/devices" { Handle-AdminDevices -method $method -postParams $postParams -session $session }
                     "/admin/connectors" { Handle-AdminConnectors -method $method -postParams $postParams -session $session }
                     "/admin/logs"    { Handle-AdminLogs }
@@ -201,6 +198,21 @@ function Start-ConfigServer {
                         $response.StatusCode = 302
                         $response.Headers.Add("Location", $result.Redirect)
                         $response.Close()
+                        continue
+                    }
+                    # Réponse brute (API) : renvoyée telle quelle, sans habillage HTML
+                    if ($result.ContainsKey('Raw')) {
+                        $response.ContentType = "text/plain; charset=utf-8"
+                        if ($result.StatusCode) { $response.StatusCode = $result.StatusCode }
+                        $rawBuffer = [System.Text.Encoding]::UTF8.GetBytes([string]$result.Raw)
+                        $response.ContentLength64 = $rawBuffer.Length
+                        try {
+                            $response.OutputStream.Write($rawBuffer, 0, $rawBuffer.Length)
+                        } catch [System.Net.HttpListenerException] {
+                            Write-Warning "Connexion client perdue"
+                        } finally {
+                            $response.Close()
+                        }
                         continue
                     }
                     $body = $result.Body

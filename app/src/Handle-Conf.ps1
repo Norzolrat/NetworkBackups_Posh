@@ -32,74 +32,87 @@ function Get-RevisionSelector {
         $nbRevShown++
         $rev_date = $(svn log -r $i $filePath | Select-String -Pattern "\| ([\d-]+ [\d:]+)" | ForEach-Object { $_.Matches.Groups[1].Value })
         if ($rev_date) {
-            if ($i -eq $currentRevision) {
-                $revisionOptions += "<option value='$i' selected>$rev_date  (actuelle)</option>"
-            } else {
-                $revisionOptions += "<option value='$i'>$rev_date</option>"
-            }
+            $suffix = if ($i -eq $currentRevision) { "  (actuelle)" } else { "" }
+            $revisionOptions += "<option value='$i'>$rev_date$suffix</option>"
         }
         $i--
     }
 
     return @"
-<div class='revision-section card'>
-    <div class='revision-controls'>
-        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="10"></circle>
-            <polyline points="12 6 12 12 16 14"></polyline>
-        </svg>
-        <label for='revisionSelect'>Révision</label>
-        <select id='revisionSelect' class='select'>
-            <option value=''>Sélectionner une révision</option>
-            $($revisionOptions -join "`n")
-        </select>
-        <button class='btn btn-primary' onclick='showRevision(this)'>
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="12" cy="12" r="2"></circle>
-                <path d="M22 12c-2.667 4.667-6 7-10 7s-7.333-2.333-10-7c2.667-4.667 6-7 10-7s7.333 2.333 10 7"></path>
-            </svg>
-            Voir le contenu
-        </button>
-        <button class='btn btn-secondary' onclick='diffRevision(this)'>Voir les différences</button>
-    </div>
-    <div id='revisionContent' style='display: none;'>
-        <h3 id='revisionTitle'></h3>
-        <pre id='revisionData'></pre>
-    </div>
+<div class='revision-section'>
+    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"></circle>
+        <polyline points="12 6 12 12 16 14"></polyline>
+    </svg>
+    <label for='revisionSelect'>Révision</label>
+    <select id='revisionSelect' class='select select-sm' onchange='showRevision(this)'>
+        <option value=''>Version actuelle</option>
+        $($revisionOptions -join "`n")
+    </select>
+    <span class='rev-status' style='display:none;'></span>
+    <button class='btn btn-secondary btn-sm' onclick='diffRevision(this)'>Voir les différences</button>
 </div>
 "@
 }
 
+# API texte brut : contenu d'une configuration à une révision donnée (HEAD si omise).
+# Consommé en fetch() par la page /conf pour changer de révision sans recharger.
+function Handle-ConfContent {
+    param(
+        $parameters
+    )
 
+    $backupPath = (Join-Path $(Split-Path -parent $PSScriptRoot) "NetworkBackups")
+    $configsPath = Join-Path $backupPath "configs"
+
+    $device = $parameters['device']
+    $rev = $parameters['rev']
+
+    if ($rev -and $rev -notmatch '^\d+$') {
+        return @{ Raw = "Révision invalide"; StatusCode = 400 }
+    }
+
+    $filePath = Join-Path $configsPath $device
+    $resolvedTarget = [System.IO.Path]::GetFullPath($filePath)
+    $resolvedRoot = [System.IO.Path]::GetFullPath($configsPath)
+
+    if (-not $device -or -not (Test-Path $filePath -PathType Leaf) -or -not $resolvedTarget.StartsWith($resolvedRoot + [System.IO.Path]::DirectorySeparatorChar)) {
+        return @{ Raw = "Équipement invalide"; StatusCode = 400 }
+    }
+
+    $revArg = if ($rev) { $rev } else { 'HEAD' }
+    return @{ Raw = (Get-ConfigContent -Rev $revArg -File $resolvedTarget) }
+}
+
+
+# Deux listes déroulantes indépendantes (sites et types), combinées en ET par le JS
 function Get-Filter {
     $devicesData = Get-Content "$PSScriptRoot/../devices.json" | ConvertFrom-Json
     $deviceSites = @{}
-    $deviceBrand = @{}
-    
+    $deviceTypes = @{}
+
     foreach ($device in $devicesData.devices) {
-        if (-not $deviceSites.ContainsKey($device.Site)) {
-            $deviceSites[$device.Site] = $device.Site
-        }
-        if (-not $deviceBrand.ContainsKey($device.Type)) {
-            $deviceBrand[$device.Type] = $device.Type
-        }
+        if ($device.Site) { $deviceSites[$device.Site] = $true }
+        if ($device.Type) { $deviceTypes[$device.Type] = $true }
     }
 
-    $deviceSitesHTML = ($deviceSites.Keys | Sort-Object | ForEach-Object {
+    $siteOptions = ($deviceSites.Keys | Sort-Object | ForEach-Object {
         "<option value='site-$_'>$_</option>"
     }) -join "`n"
 
-    $deviceBrandHTML = ($deviceBrand.Keys | Sort-Object | ForEach-Object {
+    $typeOptions = ($deviceTypes.Keys | Sort-Object | ForEach-Object {
         "<option value='type-$_'>$_</option>"
     }) -join "`n"
 
     return @"
-<optgroup label='Sites'>
-    $deviceSitesHTML
-</optgroup>
-<optgroup label='Types'>
-    $deviceBrandHTML
-</optgroup>
+<select id='filterSite' class='select select-sm' onchange='filterConfigs()'>
+    <option value='all'>Tous les sites</option>
+    $siteOptions
+</select>
+<select id='filterType' class='select select-sm' onchange='filterConfigs()'>
+    <option value='all'>Tous les types</option>
+    $typeOptions
+</select>
 "@
 }
 
@@ -142,32 +155,7 @@ function Handle-Conf {
         return "<h1>Aucune configuration trouvée</h1>"
     }
 
-    foreach ($key in $parameters.Keys) {
-        if ($configs[$key]) {
-            if ($($parameters[$key]) -match '^\d+$') {
-                if ($($parameters[$key]) -lt $configs[$key]['Revision']) {
-                    $configs[$key]['Revision'] = $($parameters[$key])
-                }
-            }
-        }
-    }
-
     $filterOptions = Get-Filter
-
-    $filterHtml = @"
-<div class='toolbar card'>
-    <div class='filter-group'>
-        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
-        </svg>
-        <label for='filterSelect'>Filtrer par</label>
-        <select id='filterSelect' class='select' onchange='filterConfigs()'>
-            <option value='all'>Tous</option>
-            $filterOptions
-        </select>
-    </div>
-</div>
-"@
 
     $tabButtons = $configs.Keys | ForEach-Object {
         $config = $configs[$_]
@@ -192,7 +180,6 @@ function Handle-Conf {
             <line x1="6" y1="18" x2="6.01" y2="18"></line>
         </svg>
         <h2>$($config.Name)</h2>
-        <span class='badge'>Dernière rév. $currentRev</span>
         <form method='POST' action='/admin/backup' class='device-backup' onsubmit="return confirm('Lancer un backup de $($config.Name) maintenant ?')">
             <input type='hidden' name='csrf' value='$($session.Csrf)'>
             <input type='hidden' name='device' value='$($config.Name)'>
@@ -204,20 +191,29 @@ function Handle-Conf {
     </div>
 
     $(Get-RevisionSelector -currentRevision $currentRev -revisionCount 10 -fileName $config.Name)
-    <div class='content content-card' id="cnt_$($config.Name)">
-        <pre>$content</pre>
+    <div class='content' id="cnt_$($config.Name)">
+        <pre data-rev='latest'>$content</pre>
     </div>
 </div>
 "@
     }
 
     return @"
-$filterHtml
-<div class='tab'>
-    $($tabButtons -join "`n")
+<div class='tab-row'>
+    <div class='filter-inline'>
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+        </svg>
+        $filterOptions
+    </div>
+    <div class='tab'>
+        $($tabButtons -join "`n")
+    </div>
 </div>
 
 $($tabContents -join "`n")
+
+<div id='noSelection' class='card empty-state' style='display:none;'>Sélectionnez un équipement dans la liste ci-dessus pour afficher sa configuration.</div>
 "@
 
 }
