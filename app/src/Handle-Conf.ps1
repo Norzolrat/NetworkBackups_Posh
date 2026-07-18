@@ -105,7 +105,8 @@ function Get-Filter {
 
 function Handle-Conf {
     param(
-        $parameters
+        $parameters,
+        $session
     )
 
     $backupPath = (Join-Path $(Split-Path -parent $PSScriptRoot) "NetworkBackups")
@@ -192,6 +193,14 @@ function Handle-Conf {
         </svg>
         <h2>$($config.Name)</h2>
         <span class='badge'>Dernière rév. $currentRev</span>
+        <form method='POST' action='/admin/backup' class='device-backup' onsubmit="return confirm('Lancer un backup de $($config.Name) maintenant ?')">
+            <input type='hidden' name='csrf' value='$($session.Csrf)'>
+            <input type='hidden' name='device' value='$($config.Name)'>
+            <button type='submit' class='btn btn-secondary btn-sm'>
+                <svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polygon points='13 2 3 14 12 14 11 22 21 10 12 10 13 2'></polygon></svg>
+                Backup manuel
+            </button>
+        </form>
     </div>
 
     $(Get-RevisionSelector -currentRevision $currentRev -revisionCount 10 -fileName $config.Name)

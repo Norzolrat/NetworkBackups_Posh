@@ -30,17 +30,9 @@ function Handle-AdminDashboard {
         <h3>Paramètres</h3>
         <p>Changer le mot de passe admin et les variables de l'application.</p>
     </a>
-    <div class='card action-card'>
-        <svg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polygon points='13 2 3 14 12 14 11 22 21 10 12 10 13 2'></polygon></svg>
-        <h3>Backup manuel</h3>
-        <p>Lance Backup-Network.ps1 en arrière-plan, détail dans les journaux.</p>
-        <form method='POST' action='/admin/backup'>
-            <input type='hidden' name='csrf' value='$($session.Csrf)'>
-            <button type='submit' class='btn btn-primary'>Lancer un backup</button>
-        </form>
-    </div>
 </div>
-<p class='hint'>Cette page sera enrichie plus tard (statistiques, état du cron, alertes...).</p>
+<p class='hint'>Le backup manuel d'un équipement se lance depuis la page <a href='/conf'>Configurations</a> (bouton sur l'équipement sélectionné).
+Cette page sera enrichie plus tard (statistiques, état du cron, alertes...).</p>
 "@
 }
 
@@ -204,10 +196,31 @@ function Handle-AdminBackup {
         return @{ Body = "<div class='notice notice-error'>Requête invalide</div>"; StatusCode = 400 }
     }
 
+    $deviceName = $postParams['device']
+    if ($deviceName) {
+        # Nom validé contre devices.json + charset sûr : il est ensuite interpolé dans une commande shell
+        $knownDevices = @()
+        try {
+            $knownDevices = @((Get-Content "$PSScriptRoot/../devices.json" -Raw | ConvertFrom-Json).devices | ForEach-Object { $_.Name })
+        } catch {}
+        if ($knownDevices -notcontains $deviceName -or $deviceName -notmatch '^[A-Za-z0-9._-]{1,64}$') {
+            return @{ Body = "<div class='notice notice-error'>Équipement inconnu</div>"; StatusCode = 400 }
+        }
+
+        Start-Process -FilePath "/bin/sh" -ArgumentList "-c `"pwsh /app/Backup-Network.ps1 -Verbose -DeviceName '$deviceName' >> /var/log/backup.log 2>&1`"" | Out-Null
+
+        $encName = [System.Web.HttpUtility]::HtmlEncode($deviceName)
+        return @"
+<div class='notice notice-success'>Backup de <strong>$encName</strong> lancé en arrière-plan, consultez les <a href='/admin/logs'>journaux</a> dans quelques instants.</div>
+<a class='btn btn-secondary' href='/conf'>← Retour aux configurations</a>
+"@
+    }
+
+    # Sans équipement : backup complet (plus proposé dans l'UI, conservé pour compatibilité)
     Start-Process -FilePath "/bin/sh" -ArgumentList '-c "pwsh /app/Backup-Network.ps1 -Verbose >> /var/log/backup.log 2>&1"' | Out-Null
 
     return @"
-<div class='notice notice-success'>Backup lancé en arrière-plan, consultez les <a href='/admin/logs'>journaux</a> dans quelques instants.</div>
+<div class='notice notice-success'>Backup complet lancé en arrière-plan, consultez les <a href='/admin/logs'>journaux</a> dans quelques instants.</div>
 <a class='btn btn-secondary' href='/admin'>← Vue d'ensemble</a>
 "@
 }

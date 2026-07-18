@@ -97,7 +97,14 @@ function Update-AdminPassword {
         return "<div class='notice notice-error'>La confirmation ne correspond pas au nouveau mot de passe.</div>"
     }
 
-    Set-AppSetting -name 'ADMIN_PASSWORD_HASH' -value (New-Argon2Hash -password $new)
+    # Auto-vérification avant enregistrement : ne jamais stocker un hash qui ne
+    # validerait pas le mot de passe qu'il est censé représenter
+    $newHash = New-Argon2Hash -password $new
+    if (-not (Test-Argon2Hash -password $new -encodedHash $newHash)) {
+        return "<div class='notice notice-error'>Auto-vérification du hash échouée, mot de passe inchangé. Réessayez.</div>"
+    }
+
+    Set-AppSetting -name 'ADMIN_PASSWORD_HASH' -value $newHash
     Remove-OtherSessions -keepToken $sessionToken
 
     return "<div class='notice notice-success'>Mot de passe admin mis à jour (hash Argon2id enregistré, les autres sessions ont été déconnectées).</div>"

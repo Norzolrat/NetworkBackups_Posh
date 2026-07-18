@@ -1,6 +1,9 @@
 # Lancer avec -Verbose pour obtenir le déroulé détaillé (connexions, lectures SSH, tailles...)
+# -DeviceName limite le backup à un seul équipement (utilisé par le backup manuel de l'UI)
 [CmdletBinding()]
-param()
+param(
+    [string]$DeviceName
+)
 
 # Import des modules requis
 Import-Module Posh-SSH
@@ -468,6 +471,14 @@ function Backup-NetworkDevices {
 
     try {
         $devices = Import-DeviceConfig
+        if ($DeviceName) {
+            $devices = @($devices | Where-Object { $_.Name -eq $DeviceName })
+            if ($devices.Count -eq 0) {
+                Write-Host "❌ Équipement '$DeviceName' introuvable dans devices.json" -ForegroundColor Red
+                return
+            }
+            Write-Verbose "Backup limité à l'équipement $DeviceName"
+        }
         $connectors = Import-Connectors
 
         $successCount = 0

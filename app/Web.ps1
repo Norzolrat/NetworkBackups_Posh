@@ -184,7 +184,7 @@ function Start-ConfigServer {
                 $result = switch ($path) {
                     "/login"         { Handle-Login -method $method -postParams $postParams -clientIp $clientIp }
                     "/logout"        { Handle-Logout -token $sessionCookie.Value }
-                    "/conf"          { Handle-Conf -parameters $parameters }
+                    "/conf"          { Handle-Conf -parameters $parameters -session $session }
                     "/diff"          { Handle-Diff -parameters $parameters }
                     "/admin"         { Handle-AdminDashboard -session $session }
                     "/admin/devices" { Handle-AdminDevices -method $method -postParams $postParams -session $session }
