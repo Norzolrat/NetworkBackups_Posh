@@ -39,6 +39,19 @@ function Remove-Session {
     }
 }
 
+# Déconnecte toutes les sessions sauf celle indiquée (utilisé au changement de mot de passe)
+function Remove-OtherSessions {
+    param(
+        [string]$keepToken
+    )
+
+    foreach ($token in @($script:Sessions.Keys)) {
+        if ($token -ne $keepToken) {
+            $script:Sessions.Remove($token)
+        }
+    }
+}
+
 function Test-ConstantTimeEquals {
     param(
         [string]$a,
@@ -60,8 +73,8 @@ function Test-AdminCredentials {
         [string]$password
     )
 
-    $expectedUser = $env:ADMIN_USER
-    $passwordHash = $env:ADMIN_PASSWORD_HASH
+    $expectedUser = Get-AppSetting 'ADMIN_USER'
+    $passwordHash = Get-AppSetting 'ADMIN_PASSWORD_HASH'
 
     if (-not $expectedUser) {
         Write-Warning "ADMIN_USER non configuré : connexion admin impossible"
@@ -177,7 +190,7 @@ function Handle-Login {
             $session = New-Session
             $cookie = [System.Net.Cookie]::new('session', $session.Token, '/')
             $cookie.HttpOnly = $true
-            $cookie.Secure = ($env:WEB_PREFIX -eq 'https')
+            $cookie.Secure = ((Get-AppSetting 'WEB_PREFIX') -eq 'https')
             return @{ Redirect = '/admin'; Cookie = $cookie }
         }
 

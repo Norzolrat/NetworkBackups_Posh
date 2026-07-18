@@ -21,6 +21,8 @@ Write-Host "🔁 Démarrage du service cron..."
 Start-Process crond -ArgumentList "-l 2"
 
 # 4. Lancer le script Web principal
+# Les variables peuvent être surchargées depuis l'admin (/admin/settings -> settings.json)
+. /app/src/Handle-Settings.ps1
 Write-Host "🚀 Démarrage de l'application principale..."
-pwsh /app/Web.ps1 -prefix $env:WEB_PREFIX -addr $env:WEB_ADDR -port $env:WEB_PORT
+pwsh /app/Web.ps1 -prefix (Get-AppSetting 'WEB_PREFIX' 'http') -addr (Get-AppSetting 'WEB_ADDR' '0.0.0.0') -port (Get-AppSetting 'WEB_PORT' '8080')
 

@@ -37,6 +37,7 @@ NetBackup-PowerShell est un projet PowerShell embarqué dans un conteneur Docker
 │   │   ├── Handle-Admin.ps1      # Espace admin (/admin)
 │   │   ├── Handle-Connectors.ps1      # Connecteurs SSH (/admin/connectors)
 │   │   ├── Argon2.ps1                 # Hachage Argon2 du mot de passe admin
+│   │   ├── Handle-Settings.ps1        # Paramètres (/admin/settings)
 │   │   └── Utils.ps1             # Fonctions utilitaires
 │   ├── Web.ps1                   # Serveur HTTP (interface web)
 │   └── bootstrap.ps1            # Script de démarrage global
@@ -112,6 +113,7 @@ Fonctionnalités (`/conf`, après connexion) :
   - `/admin/devices` : gestion des équipements via un formulaire dynamique (ajout, modification, suppression). Les champs Site et Type proposent les valeurs existantes plus une option « Nouveau… ». Les changements sont appliqués côté navigateur puis persistés d'un bloc via « Enregistrer les modifications » (une sauvegarde `devices.json.bak` est faite avant chaque écriture)
   - `/admin/connectors` : gestion des **connecteurs d'authentification** — couples identifiant/mot de passe ou clés SSH (PEM/OpenSSH, passphrase optionnelle). Chaque équipement référence **obligatoirement** un connecteur via sa propriété `Connector` (sélecteur dans le formulaire Équipements) — c'est l'unique mécanisme d'authentification aux équipements. Les secrets sont stockés via `Export-Clixml` avec mots de passe, clés privées et passphrases en `SecureString`, dans `/app/secrets/connectors.xml` (fichier en `600`, monter `/app/secrets` en volume pour la persistance). Aucune clé n'est écrite en clair sur le disque : elle est matérialisée en tmpfs (`/dev/shm`) uniquement le temps de la connexion SSH. Les secrets ne sont jamais renvoyés au navigateur, et un connecteur utilisé par un équipement ne peut pas être supprimé. Un ancien `connectors.json` (format v1) est migré automatiquement au premier affichage de l'admin.
   - `/admin/logs` : consulter les 200 dernières lignes de `/var/log/backup.log`
+  - `/admin/settings` : **paramètres** — changement du mot de passe admin (vérification de l'actuel, re-haché en Argon2id, les autres sessions sont déconnectées) et édition des variables (`ADMIN_USER`, `PUB_URL`, `WEB_PREFIX`, `WEB_ADDR`, `WEB_PORT`). Les valeurs définies ici sont stockées dans `/app/secrets/settings.json` (600) et **priment sur les variables d'environnement** ; un champ vide revient à la variable d'environnement. Les variables d'écoute web (↻) sont prises en compte au redémarrage du conteneur.
   - déclenchement d'un backup manuel (lance `Backup-Network.ps1` en arrière-plan)
 
 Sans session valide, toutes les routes (sauf `/login`) redirigent vers la page de connexion.
