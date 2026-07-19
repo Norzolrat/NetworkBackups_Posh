@@ -8,6 +8,7 @@ param(
 . "/app/src/Handle-Conf"
 . "/app/src/Handle-Diff"
 . "/app/src/Argon2"
+. "/app/src/RemoteBackup"
 . "/app/src/Handle-Settings"
 . "/app/src/Handle-Auth"
 . "/app/src/Handle-Admin"

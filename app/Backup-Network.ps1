@@ -8,6 +8,9 @@ param(
 # Import des modules requis
 Import-Module Posh-SSH
 
+# Sauvegarde distante optionnelle (FTP/SMB), configurée dans /admin/settings
+. "$PSScriptRoot/src/RemoteBackup.ps1"
+
 # Chemins des fichiers de configuration
 $configPath = "$PSScriptRoot\devices.json"
 $backupPath = "$PSScriptRoot\NetworkBackups"
@@ -597,6 +600,13 @@ function Backup-NetworkDevices {
         
         # Ajouter les nouveaux fichiers au repository SVN
         Add-NewFiles -Path (Join-Path $backupPath "configs")
+
+        # Copie distante optionnelle (FTP/SMB) + rétention — n'échoue jamais le backup
+        try {
+            Invoke-RemoteBackup -configsPath (Join-Path $backupPath "configs")
+        } catch {
+            Write-Warning "Sauvegarde distante échouée : $_"
+        }
 
         $summaryColor = if ($failedDevices) { 'Yellow' } else { 'Green' }
         $failedSuffix = if ($failedDevices) { " ($($failedDevices -join ', '))" } else { "" }

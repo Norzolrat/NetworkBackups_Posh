@@ -9,7 +9,8 @@ RUN apk add --no-cache \
     less \
     bash \
     curl \
-    argon2
+    argon2 \
+    samba-client
 
 # Créer le dossier de configuration de PowerShell
 RUN mkdir -p /root/.config/powershell

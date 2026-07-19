@@ -507,6 +507,15 @@ function toggleCronFields() {
     });
 }
 
+/* ===== Sauvegarde distante (/admin/settings) ===== */
+function toggleRemoteFields() {
+    const type = document.getElementById("remoteType");
+    if (!type) return;
+    document.querySelectorAll(".remote-fields").forEach(el => el.style.display = type.value === "off" ? "none" : "");
+    document.querySelectorAll(".remote-ftp").forEach(el => el.style.display = type.value === "ftp" ? "" : "none");
+    document.querySelectorAll(".remote-smb").forEach(el => el.style.display = type.value === "smb" ? "" : "none");
+}
+
 function resetConnectorForm() {
     document.getElementById("connectorForm").reset();
     document.getElementById("connectorFormTitle").textContent = "Ajouter un connecteur";
@@ -520,6 +529,7 @@ document.addEventListener('DOMContentLoaded', function() {
     initDeviceManager();
     toggleConnectorFields();
     toggleCronFields();
+    toggleRemoteFields();
     // Auto-rafraîchissement uniquement sur la page des configurations :
     // ailleurs (édition de devices.json notamment) un reload perdrait la saisie en cours.
     if (window.location.pathname === '/conf') {
