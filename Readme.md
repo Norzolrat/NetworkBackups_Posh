@@ -12,8 +12,10 @@ NetBackup-PowerShell est un projet PowerShell embarqué dans un conteneur Docker
 - 💾 Sauvegarde des configurations dans `/app/NetworkBackups/configs`
 - 📁 Suivi des versions avec `svn`
 - 🌐 Interface web locale sur le port `8080` pour visualiser les configurations et leurs révisions, protégée par un login admin
-- 🛠️ Espace admin (`/admin`) : gestion de `devices.json`, connecteurs d'authentification (mot de passe ou clé SSH), consultation des logs de backup, déclenchement d'un backup manuel
-- 📆 Tâche cron intégrée pour exécuter les backups toutes les heures
+- 🛠️ Administration intégrée : équipements (`/admin/devices`), connecteurs (`/admin/connectors`), journaux (`/admin/logs`) et paramètres (`/admin/settings` : mot de passe admin, planification cron, sauvegarde distante, variables)
+- ⚡ Backup manuel par équipement depuis la page Configurations, et téléchargement de la configuration affichée
+- 📆 Sauvegardes planifiées via cron, fréquence configurable depuis l'interface (horaire par défaut)
+- ☁️ Sauvegarde distante optionnelle (FTP ou SMB) avec rétention du nombre d'archives
 
 ---
 
@@ -34,10 +36,11 @@ NetBackup-PowerShell est un projet PowerShell embarqué dans un conteneur Docker
 │   │   ├── Handle-Conf.ps1       # Rendu des configs (/conf)
 │   │   ├── Handle-Diff.ps1       # Rendu des diffs (/diff)
 │   │   ├── Handle-Auth.ps1       # Sessions, login/logout
-│   │   ├── Handle-Admin.ps1      # Espace admin (/admin)
+│   │   ├── Handle-Admin.ps1      # Équipements, journaux, backup manuel
 │   │   ├── Handle-Connectors.ps1      # Connecteurs SSH (/admin/connectors)
 │   │   ├── Argon2.ps1                 # Hachage Argon2 du mot de passe admin
 │   │   ├── Handle-Settings.ps1        # Paramètres (/admin/settings)
+│   │   ├── RemoteBackup.ps1           # Sauvegarde distante FTP/SMB + rétention
 │   │   └── Utils.ps1             # Fonctions utilitaires
 │   ├── Web.ps1                   # Serveur HTTP (interface web)
 │   └── bootstrap.ps1            # Script de démarrage global
@@ -68,7 +71,7 @@ PUB_URL=http://localhost:8080
 WEB_PORT=8080
 ```
 
-⚠️ `ADMIN_USER`/`ADMIN_PASSWORD_HASH` sont **obligatoires** : toute l'interface web (`/conf`, `/diff`, `/admin`) est protégée par un login, sans ces variables la connexion admin est impossible.
+⚠️ `ADMIN_USER`/`ADMIN_PASSWORD_HASH` sont **obligatoires** : toute l'interface web est protégée par un login, sans ces variables la connexion admin est impossible. Une fois connecté, le mot de passe et la plupart des variables se modifient depuis `/admin/settings` (les valeurs enregistrées là priment sur le `.env`).
 
 Le mot de passe admin est stocké **haché en Argon2id** (plus de mot de passe en clair dans `.env`). Générez le hash avec l'outil fourni :
 
@@ -85,10 +88,11 @@ docker exec -it <container_id> tail -f /var/log/backup.log
 
 La console du conteneur (`docker logs`) ne montre que l'essentiel (équipement traité, réussite/échec, résumé). Le détail complet (connexions SSH, lectures, tailles...) est écrit dans `/var/log/backup.log` par les runs cron et les backups manuels, exécutés avec `-Verbose`.
 
-Cela effectue :
+Au démarrage, le conteneur effectue :
 - Lancement du script de backup initial (`Backup-Network.ps1`)
-- Planification d’un cron pour l’exécuter toutes les heures
-- Lancement de l’interface Web sur `http://0.0.0.0:8080`
+- Planification du cron selon la configuration de `/admin/settings` (toutes les heures par défaut)
+- Lancement de l'interface Web sur `http://0.0.0.0:8080`
+- Le mot de passe admin par defaut est `changeme`
 
 ---
 
@@ -99,11 +103,10 @@ Accessible via : [http://localhost:8080](http://localhost:8080) — redirige ver
 L'interface reprend les codes d'un panneau d'administration moderne (inspiration Cloudflare) : navigation latérale (Sauvegardes / Administration), barre supérieure avec titre de page, contenu en cartes — le tout aux couleurs bleues du logo Aresia.
 
 Fonctionnalités (`/conf`, après connexion) :
-- Liste des équipements sauvegardés
-- Visualisation des configurations actuelles
-- Sélecteur de révisions SVN
-- Filtre pour les équipements (selectionner par site ou par os)
-- Afficher seulement les différences entre une version et la plus actuelle
+- Liste des équipements sauvegardés en onglets, deux filtres (par site et par type) qui restreignent la liste — la configuration affichée reste celle sélectionnée
+- Visualisation de la configuration actuelle, changement de révision SVN **sans rechargement de page** (le contenu s'affiche dès la sélection)
+- Affichage des différences entre une révision et la version actuelle (`/diff`)
+- Téléchargement de la configuration affichée, à la révision sélectionnée
 - Backup manuel de l'équipement sélectionné (bouton sur chaque onglet, exécute `Backup-Network.ps1 -DeviceName <nom>` en arrière-plan)
 
 ### 🔑 Authentification et espace admin
@@ -122,13 +125,15 @@ Sans session valide, toutes les routes (sauf `/login`) redirigent vers la page d
 
 ### Capture d'écran de l'interface
 
+> ⚠️ Captures antérieures à la refonte de l'interface (panneau latéral, cartes, filtres) — à rafraîchir.
+
 ![Interface Config NetBackup-PowerShell](./img/interface_config.png)
 
-*Exemple de l'interface de sauvegarde avec affichage d'une configuration d'équipement réseau*
+*Affichage d'une configuration d'équipement réseau (ancienne interface)*
 
 ![Interface Diff NetBackup-PowerShell](./img/interface_diff.png)
 
-*Exemple de l'interface de sauvegarde avec affichage des différences d'un équipement réseau*
+*Affichage des différences d'un équipement réseau (ancienne interface)*
 
 ---
 
@@ -166,9 +171,12 @@ Sans session valide, toutes les routes (sauf `/login`) redirigent vers la page d
 ## 🛠️ Dépendances
 
 - PowerShell Core (via Alpine)
-- `Posh-SSH`
-- `subversion` & `svnadmin`
-- `cron`
+- `Posh-SSH` (connexions SSH aux équipements)
+- `subversion` & `svnadmin` (versionnage des configurations)
+- `crond` (busybox — sauvegardes planifiées)
+- `argon2` (hachage du mot de passe admin)
+- `curl` (sauvegarde distante FTP)
+- `samba-client` (sauvegarde distante SMB)
 
 ---
 
