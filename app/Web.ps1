@@ -205,6 +205,9 @@ function Start-ConfigServer {
                     if ($result.ContainsKey('Raw')) {
                         $response.ContentType = "text/plain; charset=utf-8"
                         if ($result.StatusCode) { $response.StatusCode = $result.StatusCode }
+                        if ($result.FileName) {
+                            $response.Headers.Add("Content-Disposition", "attachment; filename=`"$($result.FileName)`"")
+                        }
                         $rawBuffer = [System.Text.Encoding]::UTF8.GetBytes([string]$result.Raw)
                         $response.ContentLength64 = $rawBuffer.Length
                         try {

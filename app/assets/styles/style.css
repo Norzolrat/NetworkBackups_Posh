@@ -298,7 +298,7 @@ a.action-card:hover {
 }
 .revision-section svg { color: var(--muted); flex-shrink: 0; }
 .revision-section label { font-weight: 600; font-size: 13px; }
-.revision-section .btn { margin-left: auto; }
+.revision-section .btn:first-of-type { margin-left: auto; }
 .rev-status { color: var(--muted); font-size: 12.5px; }
 
 .content pre { border-radius: 0 0 var(--radius) var(--radius); }

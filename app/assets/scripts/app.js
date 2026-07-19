@@ -27,6 +27,16 @@ function showRevision(select) {
         });
 }
 
+// Télécharge la configuration de l'équipement affiché, à la révision sélectionnée
+function downloadConfig(button) {
+    const tab = button.closest('.tabcontent');
+    const select = tab.querySelector('#revisionSelect');
+    const rev = select ? select.value : "";
+    window.location.href = "/api/conf?device=" + encodeURIComponent(tab.id)
+        + (rev ? "&rev=" + encodeURIComponent(rev) : "")
+        + "&download=1";
+}
+
 function diffRevision(button) {
     const tab = button.closest('.tabcontent');
     const select = tab.querySelector('#revisionSelect');
