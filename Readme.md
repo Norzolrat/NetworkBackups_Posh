@@ -125,8 +125,6 @@ Sans session valide, toutes les routes (sauf `/login`) redirigent vers la page d
 
 ### Capture d'écran de l'interface
 
-> ⚠️ Captures antérieures à la refonte de l'interface (panneau latéral, cartes, filtres) — à rafraîchir.
-
 ![Interface Config NetBackup-PowerShell](./img/interface_config.png)
 
 *Affichage d'une configuration d'équipement réseau (ancienne interface)*
